@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Header, Param, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Header, Param, Post, Query, Body } from '@nestjs/common';
 import { SimulatorDto } from './simulator.dto';
 import { CacheTTL } from '@nestjs/cache-manager';
 import { SimulatorService } from './simulator.service';
@@ -7,6 +7,7 @@ import { HistoricQuoteService } from '../../historic-quote/historic-quote.servic
 import Decimal from 'decimal.js';
 import { DeploymentService, ExchangeId } from '../../deployment/deployment.service';
 import { ApiExchangeIdParam, ExchangeIdParam } from '../../exchange-id-param.decorator';
+import { PredictionDataDto } from './prediction-data.dto';
 
 @Controller({ version: '1', path: ':exchangeId?/simulator' })
 export class SimulatorController {
@@ -50,6 +51,48 @@ export class SimulatorController {
     const deployment = this.deploymentService.getDeploymentByExchangeId(exchangeId);
     const data = await this.simulatorService.generateSimulation(params, usdPrices, deployment);
 
+    return {
+      data: data.dates.map((d, i) => ({
+        date: d,
+        price: data.prices[i],
+        sell: data.ask[i],
+        buy: data.bid[i],
+        baseBalance: data.RISK.balance[i],
+        basePortion: data.portfolio_risk[i],
+        quoteBalance: data.CASH.balance[i],
+        quotePortion: data.portfolio_cash[i],
+        portfolioValueInQuote: data.portfolio_value[i],
+        hodlValueInQuote: data.hodl_value[i],
+        portfolioOverHodlInPercent: data.portfolio_over_hodl[i],
+      })),
+      roiInPercent: data.portfolio_over_hodl[data.portfolio_over_hodl.length - 1],
+      gainsInQuote: new Decimal(
+        new Decimal(data.portfolio_value[data.portfolio_value.length - 1]).minus(
+          new Decimal(data.hodl_value[data.hodl_value.length - 1]),
+        ),
+      ).toString(),
+      bounds: {
+        sellMax: data.max_ask,
+        sellMin: data.min_ask,
+        buyMax: data.max_bid,
+        buyMin: data.min_bid,
+      },
+      debug: data.curve_parameters,
+    };
+  }
+
+  @Post('simulate-with-prediction')
+  @ApiExchangeIdParam()
+  async simulateWithPrediction(
+    @Body() params: SimulatorDto,
+    @Body('predictionData') predictionData: PredictionDataDto,
+    @ExchangeIdParam() exchangeId: ExchangeId,
+  ) {
+    const deployment = await this.deploymentService.getDeploymentByExchangeId(exchangeId);
+    return this.simulatorService.generateSimulationWithPrediction(params, predictionData, deployment);
+  }
+
+  private formatSimulationResult(data: any) {
     return {
       data: data.dates.map((d, i) => ({
         date: d,

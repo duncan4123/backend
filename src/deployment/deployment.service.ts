@@ -5,15 +5,13 @@ import { ConfigService } from '@nestjs/config';
 export enum BlockchainType {
   Ethereum = 'ethereum',
   Sei = 'sei-network',
-  Celo = 'celo',
-  Blast = 'blast',
+  Base = 'base',
 }
 
 export enum ExchangeId {
   OGEthereum = 'ethereum',
   OGSei = 'sei',
-  OGCelo = 'celo',
-  OGBlast = 'blast',
+  OGBase = 'base',
 }
 
 export interface GasToken {
@@ -71,31 +69,18 @@ export class DeploymentService {
           address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
         },
       },
+
       {
-        exchangeId: ExchangeId.OGCelo,
-        blockchainType: BlockchainType.Celo,
-        rpcEndpoint: this.configService.get('CELO_RPC_ENDPOINT'),
-        harvestEventsBatchSize: 1000,
-        harvestConcurrency: 1,
-        multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
-        startBlock: 26808466,
-        gasToken: {
-          name: 'Celo',
-          symbol: 'CELO',
-          address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-        },
-      },
-      {
-        exchangeId: ExchangeId.OGBlast,
-        blockchainType: BlockchainType.Blast,
-        rpcEndpoint: this.configService.get('BLAST_RPC_ENDPOINT'),
+        exchangeId: ExchangeId.OGBase,
+        blockchainType: BlockchainType.Base,
+        rpcEndpoint: 'https://mainnet.base.org',
         harvestEventsBatchSize: 1000,
         harvestConcurrency: 5,
-        multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
-        startBlock: 6257000,
+        multicallAddress: '0xca11bde05977b3631167028862be2a173976ca11',
+        startBlock: 5315952,
         gasToken: {
-          name: 'Blast',
-          symbol: 'BLAST',
+          name: 'ETH',
+          symbol: 'ETH',
           address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
         },
       },

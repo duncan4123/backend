@@ -5,11 +5,12 @@ import * as path from 'path';
 import * as childProcess from 'child_process';
 import Decimal from 'decimal.js';
 import moment from 'moment';
-import { toTimestamp } from '../../utilities';
 import { PairTradingFeePpmUpdatedEventService } from '../../events/pair-trading-fee-ppm-updated-event/pair-trading-fee-ppm-updated-event.service';
 import { TradingFeePpmUpdatedEventService } from '../../events/trading-fee-ppm-updated-event/trading-fee-ppm-updated-event.service';
 import { HistoricQuoteService } from '../../historic-quote/historic-quote.service';
-import { BlockchainType, Deployment, DeploymentService, ExchangeId } from '../../deployment/deployment.service';
+import { Deployment } from '../../deployment/deployment.service';
+import { HistoricQuote, PredictionDataDto } from './prediction-data.dto';
+import { toTimestamp } from '../../utilities';
 
 @Injectable()
 export class SimulatorService {
@@ -142,6 +143,118 @@ export class SimulatorService {
       return { ...parsedOutput, prices: pricesRatios };
     } catch (err) {
       console.error('Error in generateSimulation:', err.message);
+      throw err;
+    }
+  }
+
+  async generateSimulationWithPrediction(params: SimulatorDto, predictionData: PredictionDataDto, deployment: Deployment): Promise<any> {
+    const { start, end, buyBudget, sellBudget, buyMin, buyMax, sellMin, sellMax } = params;
+    const baseToken = params['baseToken'].toLowerCase();
+    const quoteToken = params['quoteToken'].toLowerCase();
+
+    // Validate time range
+    if (predictionData.predictionData[0].timestamp > start || 
+        predictionData.predictionData[predictionData.predictionData.length - 1].timestamp < end) {
+      throw new Error('Prediction data does not cover the requested time range');
+    }
+
+    // Filter prediction data to match the requested time range
+    const filteredData = predictionData.predictionData.filter(
+      quote => quote.timestamp >= start && quote.timestamp <= end
+    );
+
+    // handle fees
+    const defaultFee = (await this.tradingFeePpmUpdatedEventService.last(deployment)).newFeePPM;
+    const pairFees = await this.pairTradingFeePpmUpdatedEventService.allAsDictionary(deployment);
+    let feePpm;
+    if (pairFees[baseToken] && pairFees[baseToken][quoteToken]) {
+      feePpm = pairFees[baseToken][quoteToken];
+    } else {
+      feePpm = defaultFee;
+    }
+
+    // Use filtered prediction data
+    const pricesBaseToken = filteredData;
+    const pricesQuoteToken = filteredData.map(price => ({
+      ...price,
+      close: 1, // Assuming USDC is always 1 USD
+    }));
+
+    // Calculate price ratios
+    const dates = pricesBaseToken.map(p => p.timestamp);
+    const pricesRatios = pricesBaseToken.map((p, i) =>
+      new Decimal(p.close).div(pricesQuoteToken[i].close).toString()
+    );
+
+    // Create input data for simulation
+    const inputData = {
+      portfolio_cash_value: buyBudget.toString(),
+      portfolio_risk_value: sellBudget.toString(),
+      low_range_low_price: buyMin.toString(),
+      low_range_high_price: buyMax.toString(),
+      low_range_start_price: buyMax.toString(),
+      high_range_low_price: sellMin.toString(),
+      high_range_high_price: sellMax.toString(),
+      high_range_start_price: sellMin.toString(),
+      network_fee: `${feePpm / 1000000}`,
+      prices: pricesRatios,
+    };
+
+    // Run simulation
+    const simulationResult = await this.runSimulation(inputData);
+
+    // Process and return results
+    const parsedOutput = simulationResult;
+    parsedOutput.dates = dates.map((d) => toTimestamp(new Date(d)));
+
+    return { ...parsedOutput, prices: pricesRatios };
+  }
+
+  private async runSimulation(inputData: any): Promise<any> {
+    const timestamp = Date.now();
+    const folderPath = path.join(__dirname, `../../simulator/simulation_${timestamp}`);
+    const inputFilePath = path.join(folderPath, 'input.json');
+    const outputPath = path.join(folderPath, 'output.json');
+
+    // Create folder if it doesn't exist
+    await fsPromises.mkdir(folderPath, { recursive: true });
+
+    // Write input data to input.json
+    await fsPromises.writeFile(inputFilePath, JSON.stringify(inputData, null, 2));
+
+    // Run Python executable
+    const pythonExecutablePath = path.join(__dirname, '../../simulator/run.py');
+    const pythonProcess = childProcess.spawn('python3', [pythonExecutablePath, '-c', inputFilePath, '-o', outputPath]);
+
+    // Capture Python process output
+    let pythonOutput = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      pythonOutput += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      console.error(`Error from Python process: ${data.toString()}`);
+    });
+
+    try {
+      // Return a promise that resolves with the content of the output.json file
+      await new Promise<void>((resolve, reject) => {
+        pythonProcess.on('close', (code) => {
+          if (code !== 0) {
+            console.error(`Python process exited with code ${code}`);
+            reject(new Error(`Python process exited with code ${code}`));
+            return;
+          }
+          resolve();
+        });
+      });
+
+      // Read the content of the output.json file
+      const outputData = await fsPromises.readFile(outputPath, 'utf-8');
+      return JSON.parse(outputData);
+    } catch (err) {
+      console.error('Error in runSimulation:', err.message);
       throw err;
     }
   }

@@ -5,11 +5,11 @@ export class VolumeRefactor1725977797719 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `CREATE TYPE "public"."volume_blockchaintype_enum" AS ENUM('ethereum', 'sei-network', 'celo', 'blast')`,
+      `CREATE TYPE "public"."volume_blockchaintype_enum" AS ENUM('ethereum', 'sei-network', 'base')`,
     );
     await queryRunner.query(`ALTER TABLE "volume" ADD "blockchainType" "public"."volume_blockchaintype_enum" NOT NULL`);
     await queryRunner.query(
-      `CREATE TYPE "public"."volume_exchangeid_enum" AS ENUM('ethereum', 'sei', 'celo', 'blast')`,
+      `CREATE TYPE "public"."volume_exchangeid_enum" AS ENUM('ethereum', 'sei', 'base')`,
     );
     await queryRunner.query(`ALTER TABLE "volume" ADD "exchangeId" "public"."volume_exchangeid_enum" NOT NULL`);
     await queryRunner.query(`ALTER TABLE "volume" ADD "pairId" integer NOT NULL`);

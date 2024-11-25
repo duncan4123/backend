@@ -9,6 +9,7 @@ export enum BlockchainType {
   Sei = 'sei-network',
   Celo = 'celo',
   Blast = 'blast',
+  Iota = 'iota-evm',
 }
 
 export enum ExchangeId {
@@ -16,6 +17,7 @@ export enum ExchangeId {
   OGSei = 'sei',
   OGCelo = 'celo',
   OGBlast = 'blast',
+  OGIota = 'iota',
 }
 
 export interface GasToken {
@@ -47,63 +49,19 @@ export class DeploymentService {
   private initializeDeployments(): Deployment[] {
     return [
       {
-        exchangeId: ExchangeId.OGEthereum,
-        blockchainType: BlockchainType.Ethereum,
-        rpcEndpoint: this.configService.get('ETHEREUM_RPC_ENDPOINT'),
+        exchangeId: ExchangeId.OGIota,
+        blockchainType: BlockchainType.Iota,
+        rpcEndpoint: this.configService.get('IOTA_RPC_ENDPOINT'),
         harvestEventsBatchSize: 2000000,
         harvestConcurrency: 10,
-        multicallAddress: '0x5Eb3fa2DFECdDe21C950813C665E9364fa609bD2',
-        startBlock: 17087000,
-        gasToken: {
-          name: 'Ethereum',
-          symbol: 'ETH',
-          address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-        },
-      },
-      {
-        exchangeId: ExchangeId.OGSei,
-        blockchainType: BlockchainType.Sei,
-        rpcEndpoint: this.configService.get('SEI_RPC_ENDPOINT'),
-        harvestEventsBatchSize: 1000,
-        harvestConcurrency: 1,
-        multicallAddress: '0x51aA24A9230e62CfaF259c47DE3133578cE36317',
-        startBlock: 79146720,
-        gasToken: {
-          name: 'Sei',
-          symbol: 'SEI',
-          address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-        },
-        nativeTokenAlias: '0xe30fedd158a2e3b13e9badaeabafc5516e95e8c7',
-      },
-      {
-        exchangeId: ExchangeId.OGCelo,
-        blockchainType: BlockchainType.Celo,
-        rpcEndpoint: this.configService.get('CELO_RPC_ENDPOINT'),
-        harvestEventsBatchSize: 1000,
-        harvestConcurrency: 1,
         multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
-        startBlock: 26808466,
+        startBlock: 1936296,
         gasToken: {
-          name: 'Celo',
-          symbol: 'CELO',
+          name: 'IOTA',
+          symbol: 'IOTA',
           address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
         },
-        nativeTokenAlias: '0x471ece3750da237f93b8e339c536989b8978a438',
       },
-      // {
-      //   exchangeId: ExchangeId.OGBlast,
-      //   blockchainType: BlockchainType.Blast,
-      //   rpcEndpoint: this.configService.get('BLAST_RPC_ENDPOINT'),
-      //   harvestEventsBatchSize: 1000,
-      //   harvestConcurrency: 5,
-      //   multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
-      //   startBlock: 6257000,
-      //   gasToken: {
-      //     name: 'Blast',
-      //     symbol: 'BLAST',
-      //     address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-      //   },
-      // },
     ];
   }
 

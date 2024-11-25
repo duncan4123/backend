@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import { ConfigService } from '@nestjs/config';
-import { Deployment } from '../deployment/deployment.service';
+import { BlockchainType, Deployment } from '../deployment/deployment.service';
+import { DefiLlamaTokenPrice } from './types';
 
 @Injectable()
 export class CoinGeckoService {
@@ -11,44 +12,25 @@ export class CoinGeckoService {
   private readonly baseURL = 'https://pro-api.coingecko.com/api/v3';
 
   async getLatestPrices(contractAddresses: string[], deployment: Deployment, convert = ['usd']): Promise<any> {
-    const apiKey = this.configService.get('COINGECKO_API_KEY');
     const blockchainType = deployment.blockchainType;
-    const batchSize = 150;
 
-    try {
-      const batches: string[][] = [];
-      for (let i = 0; i < contractAddresses.length; i += batchSize) {
-        const batch = contractAddresses.slice(i, i + batchSize);
-        batches.push(batch);
-      }
+    const result: Record<string, any> = {};
+    for (const address of contractAddresses) {
+      try {
+        const price = await this.fetchTokenPrice(address, blockchainType);
 
-      const requests = batches.map(async (batch) => {
-        return axios.get(`${this.baseURL}/simple/token_price/${blockchainType}`, {
-          params: {
-            contract_addresses: batch.join(','),
-            vs_currencies: convert.join(','),
-            include_last_updated_at: true,
-          },
-          headers: {
-            'x-cg-pro-api-key': apiKey,
+        Object.assign(result, {
+          [address.toLowerCase()]: {
+            usd: price,
+            last_updated_at: Math.floor(Date.now() / 1000),
           },
         });
-      });
-
-      const responses = await Promise.all(requests);
-      let result = {};
-      responses.forEach((r) => {
-        result = { ...result, ...r.data };
-      });
-
-      for (const key in result) {
-        result[key]['provider'] = 'coingecko';
+      } catch (error) {
+        throw new Error(`Failed to fetch latest token prices: ${error.message}`);
       }
-
-      return result;
-    } catch (error) {
-      throw new Error(`Failed to fetch latest token prices: ${error.message}`);
     }
+
+    return result;
   }
 
   async fetchLatestPrice(deployment: Deployment, address: string, convert = ['usd']): Promise<any> {
@@ -66,69 +48,64 @@ export class CoinGeckoService {
   }
 
   async getLatestGasTokenPrice(deployment: Deployment, convert = ['usd']): Promise<any> {
-    const apiKey = this.configService.get('COINGECKO_API_KEY');
-    const blockchainType = deployment.blockchainType;
-    const gasToken = deployment.gasToken;
+    const wrappedGasMapping = {
+      'iota-evm': '0x6e47f8d48a01b44df3fff35d258a10a3aedc114c',
+    };
+    const wrappedGasAddress = wrappedGasMapping[deployment.blockchainType];
 
     try {
-      const response = await axios.get(`${this.baseURL}/simple/price`, {
-        params: {
-          ids: blockchainType,
-          vs_currencies: convert.join(','),
-          include_last_updated_at: true,
-        },
-        headers: {
-          'x-cg-pro-api-key': apiKey,
-        },
-      });
-
-      const result = {
-        [gasToken.address.toLowerCase()]: {
-          last_updated_at: response.data[blockchainType]['last_updated_at'],
-        },
-      };
-      convert.forEach((c) => {
-        result[gasToken.address.toLowerCase()][c.toLowerCase()] = response.data[blockchainType][c.toLowerCase()];
-      });
-      return result;
+      const price = await this.getLatestPrices([wrappedGasAddress], deployment, convert);
+      return price;
     } catch (error) {
       throw new Error(`Failed to fetch latest gas token prices: ${error.message}`);
     }
   }
 
-  async getCoinPrices(coinIds: string[], convert = ['usd']): Promise<any> {
-    const apiKey = this.configService.get('COINGECKO_API_KEY');
-    const batchSize = 150;
-
+  async fetchTokenPrice(token: string, blockchainType: BlockchainType) {
     try {
-      const batches: string[][] = [];
-      for (let i = 0; i < coinIds.length; i += batchSize) {
-        const batch = coinIds.slice(i, i + batchSize);
-        batches.push(batch);
+      const price = await Promise.any([
+        this.geckoterminalPrice(token, blockchainType),
+        this.defillamaPrice(token, blockchainType),
+      ]);
+      return price;
+    } catch (e) {
+      if (e instanceof AggregateError) {
+        for (const err of e.errors) {
+          console.error(err);
+        }
       }
+      throw new Error('Token not found on any of the supported endpoints.');
+    }
+  }
 
-      const requests = batches.map(async (batch) => {
-        return axios.get(`${this.baseURL}/simple/price`, {
-          params: {
-            ids: batch.join(','),
-            vs_currencies: convert.join(','),
-            include_last_updated_at: true,
-          },
-          headers: {
-            'x-cg-pro-api-key': apiKey,
-          },
-        });
-      });
+  async geckoterminalPrice(address: string, blockchainType: BlockchainType) {
+    const response = await axios.get(
+      `https://api.geckoterminal.com/api/v2/networks/${blockchainType}/tokens/${address}`,
+    );
+    if (response.data['data']['attributes']['total_reserve_in_usd'] > 1000) {
+      return response.data['data']['attributes']['price_usd'] as number;
+    } else {
+      throw new Error('Token not found on Geckoterminal or liquidity is too low.');
+    }
+  }
 
-      const responses = await Promise.all(requests);
-      let result = {};
-      responses.forEach((r) => {
-        result = { ...result, ...r.data };
-      });
+  async defillamaPrice(token: string, blockchainType: BlockchainType) {
+    const blockchainTypeToDefillamaMapping = {
+      'iota-evm': 'iotaevm',
+    };
 
-      return result;
-    } catch (error) {
-      throw new Error(`Failed to fetch latest coin prices: ${error.message}`);
+    const chainToken = `${blockchainTypeToDefillamaMapping[blockchainType].toLowerCase()}:${token.toLowerCase()}`;
+
+    const res = await fetch(`https://coins.llama.fi/prices/current/${chainToken}`);
+    const json = (await res.json()) as DefiLlamaTokenPrice;
+    const price = json.coins[chainToken]?.price;
+    const priceTimestamp = json.coins[chainToken]?.timestamp; // in seconds
+    const passedSinceUpdate = Date.now() - priceTimestamp * 1000;
+
+    if (passedSinceUpdate < 1000 * 60 * 2) {
+      return price;
+    } else {
+      throw new Error('Token not found on DeFi Llama or last update was more than 2 minutes ago.');
     }
   }
 }

@@ -99,10 +99,8 @@ export class CoinGeckoService {
     const res = await fetch(`https://coins.llama.fi/prices/current/${chainToken}`);
     const json = (await res.json()) as DefiLlamaTokenPrice;
     const price = json.coins[chainToken]?.price;
-    const priceTimestamp = json.coins[chainToken]?.timestamp; // in seconds
-    const passedSinceUpdate = Date.now() - priceTimestamp * 1000;
 
-    if (passedSinceUpdate < 1000 * 60 * 2) {
+    if (price) {
       return price;
     } else {
       throw new Error('Token not found on DeFi Llama or last update was more than 2 minutes ago.');

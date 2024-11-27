@@ -23,6 +23,7 @@ export class CoinGeckoService {
           [address.toLowerCase()]: {
             usd: price,
             last_updated_at: Math.floor(Date.now() / 1000),
+            provider: 'coingecko',
           },
         });
       } catch (error) {

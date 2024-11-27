@@ -20,7 +20,9 @@ export function extractExchangeId(request: Request, exchangeIdParam?: string): E
   }
 
   if (!Object.values(ExchangeId).includes(exchangeId)) {
-    throw new Error(`Invalid ExchangeId: ${exchangeId}`);
+    // Temporary fallback to default
+    // throw new Error(`Invalid ExchangeId: ${exchangeId}`);
+    exchangeId = ExchangeId.OGIota; // Adjust to your preferred
   }
 
   return exchangeId;

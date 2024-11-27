@@ -52,7 +52,7 @@ export class DeploymentService {
         exchangeId: ExchangeId.OGIota,
         blockchainType: BlockchainType.Iota,
         rpcEndpoint: this.configService.get('IOTA_RPC_ENDPOINT'),
-        harvestEventsBatchSize: 2000000,
+        harvestEventsBatchSize: 2000,
         harvestConcurrency: 10,
         multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
         startBlock: 1936303,

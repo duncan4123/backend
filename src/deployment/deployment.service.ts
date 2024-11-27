@@ -55,7 +55,7 @@ export class DeploymentService {
         harvestEventsBatchSize: 2000000,
         harvestConcurrency: 10,
         multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
-        startBlock: 1936296,
+        startBlock: 1936303,
         gasToken: {
           name: 'IOTA',
           symbol: 'IOTA',

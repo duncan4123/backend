@@ -11,15 +11,19 @@ export class CoinGeckoService {
 
   private readonly baseURL = 'https://pro-api.coingecko.com/api/v3';
 
-  async getLatestPrices(contractAddresses: string[], deployment: Deployment, convert = ['usd']): Promise<any> {
+  async getLatestPrices(
+    contractAddresses: string[],
+    deployment: Deployment,
+    convert = ['usd'],
+    isGas = false,
+  ): Promise<any> {
     const blockchainType = deployment.blockchainType;
-    const gasLower = deployment.gasToken.address.toLowerCase();
 
     const result: Record<string, any> = {};
     for (const address of contractAddresses) {
       let addressLower = address.toLowerCase();
-      if (addressLower === gasLower) {
-        addressLower = gasLower;
+      if (isGas) {
+        addressLower = deployment.gasToken.address.toLowerCase();
       }
       try {
         const price = await this.fetchTokenPrice(address, blockchainType);
@@ -60,7 +64,7 @@ export class CoinGeckoService {
     const wrappedGasAddress = wrappedGasMapping[deployment.blockchainType];
 
     try {
-      const price = await this.getLatestPrices([wrappedGasAddress], deployment, convert);
+      const price = await this.getLatestPrices([wrappedGasAddress], deployment, convert, true);
       return price;
     } catch (error) {
       throw new Error(`Failed to fetch latest gas token prices: ${error.message}`);

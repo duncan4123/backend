@@ -13,14 +13,19 @@ export class CoinGeckoService {
 
   async getLatestPrices(contractAddresses: string[], deployment: Deployment, convert = ['usd']): Promise<any> {
     const blockchainType = deployment.blockchainType;
+    const gasLower = deployment.gasToken.address.toLowerCase();
 
     const result: Record<string, any> = {};
     for (const address of contractAddresses) {
+      let addressLower = address.toLowerCase();
+      if (addressLower === gasLower) {
+        addressLower = gasLower;
+      }
       try {
         const price = await this.fetchTokenPrice(address, blockchainType);
 
         Object.assign(result, {
-          [address.toLowerCase()]: {
+          [addressLower]: {
             usd: price,
             last_updated_at: Math.floor(Date.now() / 1000),
             provider: 'coingecko',

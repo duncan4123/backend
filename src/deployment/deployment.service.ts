@@ -10,6 +10,7 @@ export enum BlockchainType {
   Celo = 'celo',
   Blast = 'blast',
   Iota = 'iota-evm',
+  Mantle = 'mantle',
 }
 
 export enum ExchangeId {
@@ -18,6 +19,7 @@ export enum ExchangeId {
   OGCelo = 'celo',
   OGBlast = 'blast',
   OGIota = 'iota',
+  OGMantle = 'mantle',
 }
 
 export interface GasToken {
@@ -59,6 +61,20 @@ export class DeploymentService {
         gasToken: {
           name: 'IOTA',
           symbol: 'IOTA',
+          address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+        },
+      },
+      {
+        exchangeId: ExchangeId.OGMantle,
+        blockchainType: BlockchainType.Mantle,
+        rpcEndpoint: this.configService.get('MANTLE_RPC_ENDPOINT'),
+        harvestEventsBatchSize: 2000,
+        harvestConcurrency: 10,
+        multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
+        startBlock: 18438182,
+        gasToken: {
+          name: 'MNT',
+          symbol: 'MNT',
           address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
         },
       },

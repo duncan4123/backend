@@ -4,7 +4,7 @@ import { CacheTTL } from '@nestjs/cache-manager';
 import { DeploymentService, ExchangeId } from '../../deployment/deployment.service';
 import { BlockchainType, Deployment } from '../../deployment/deployment.service';
 import { ApiExchangeIdParam, ExchangeIdParam } from '../../exchange-id-param.decorator';
-import { CELO_NETWORK_ID, CodexService, ETHEREUM_NETWORK_ID, SEI_NETWORK_ID } from '../../codex/codex.service';
+import { CodexService } from '../../codex/codex.service';
 import { CoinGeckoService } from '../../quote/coingecko.service';
 import { BlockchainProviderConfig } from '../../historic-quote/historic-quote.service';
 
@@ -19,6 +19,7 @@ export class MarketRateController {
     [BlockchainType.Celo]: [{ name: 'codex', enabled: true }],
     [BlockchainType.Blast]: [{ name: 'codex', enabled: true }],
     [BlockchainType.Iota]: [{ name: 'coingecko', enabled: true }],
+    [BlockchainType.Mantle]: [{ name: 'codex', enabled: true }],
   };
 
   constructor(

@@ -19,7 +19,7 @@ export class MarketRateController {
     [BlockchainType.Celo]: [{ name: 'codex', enabled: true }],
     [BlockchainType.Blast]: [{ name: 'codex', enabled: true }],
     [BlockchainType.Iota]: [{ name: 'coingecko', enabled: true }],
-    [BlockchainType.Mantle]: [{ name: 'codex', enabled: true }],
+    [BlockchainType.Mantle]: [{ name: 'coingecko', enabled: true }],
   };
 
   constructor(

@@ -39,7 +39,7 @@ export class QuoteService implements OnModuleInit {
     [BlockchainType.Celo]: [{ name: 'codex', enabled: true }],
     [BlockchainType.Blast]: [{ name: 'codex', enabled: true }],
     [BlockchainType.Iota]: [{ name: 'coingecko', enabled: true }],
-    [BlockchainType.Mantle]: [{ name: 'codex', enabled: true }],
+    [BlockchainType.Mantle]: [{ name: 'coingecko', enabled: true }],
   };
 
   constructor(
@@ -93,8 +93,6 @@ export class QuoteService implements OnModuleInit {
       if (deployment.blockchainType === BlockchainType.Sei) {
         newPrices = await this.codexService.getLatestPrices(deployment, addresses);
       } else if (deployment.blockchainType === BlockchainType.Celo) {
-        newPrices = await this.codexService.getLatestPrices(deployment, addresses);
-      } else if (deployment.blockchainType === BlockchainType.Mantle) {
         newPrices = await this.codexService.getLatestPrices(deployment, addresses);
       } else {
         newPrices = await this.coingeckoService.getLatestPrices(addresses, deployment);

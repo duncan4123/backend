@@ -9,7 +9,7 @@ import * as _ from 'lodash';
 import moment from 'moment';
 import Decimal from 'decimal.js';
 import { BlockchainType, Deployment, DeploymentService, NATIVE_TOKEN } from '../deployment/deployment.service';
-import { CodexService, MANTLE_NETWORK_ID } from '../codex/codex.service';
+import { BERACHAIN_NETWORK_ID, CodexService, MANTLE_NETWORK_ID } from '../codex/codex.service';
 
 type Candlestick = {
   timestamp: number;
@@ -46,6 +46,7 @@ export class HistoricQuoteService implements OnModuleInit {
     [BlockchainType.Blast]: [{ name: 'codex', enabled: true }],
     [BlockchainType.Iota]: [{ name: 'coingecko', enabled: true }],
     [BlockchainType.Mantle]: [{ name: 'coingecko', enabled: true }],
+    [BlockchainType.Berachain]: [{ name: 'coingecko', enabled: true }], // todo enable codex
   };
 
   constructor(
@@ -78,6 +79,7 @@ export class HistoricQuoteService implements OnModuleInit {
         // await this.updateCodexQuotes(BlockchainType.Sei, SEI_NETWORK_ID),
         // await this.updateCodexQuotes(BlockchainType.Celo, CELO_NETWORK_ID),
         await this.updateCodexQuotes(BlockchainType.Mantle, MANTLE_NETWORK_ID),
+        await this.updateCodexQuotes(BlockchainType.Berachain, BERACHAIN_NETWORK_ID),
       ]);
     } catch (error) {
       console.error('Error updating historic quotes:', error);

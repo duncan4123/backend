@@ -11,6 +11,7 @@ export enum BlockchainType {
   Blast = 'blast',
   Iota = 'iota-evm',
   Mantle = 'mantle',
+  Berachain = 'berachain',
 }
 
 export enum ExchangeId {
@@ -20,6 +21,7 @@ export enum ExchangeId {
   OGBlast = 'blast',
   OGIota = 'iota',
   OGMantle = 'mantle',
+  OGBerachain = 'berachain',
 }
 
 export interface GasToken {
@@ -75,6 +77,20 @@ export class DeploymentService {
         gasToken: {
           name: 'MNT',
           symbol: 'MNT',
+          address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+        },
+      },
+      {
+        exchangeId: ExchangeId.OGBerachain,
+        blockchainType: BlockchainType.Berachain,
+        rpcEndpoint: this.configService.get('BERACHAIN_RPC_ENDPOINT'),
+        harvestEventsBatchSize: 2000,
+        harvestConcurrency: 10,
+        multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
+        startBlock: 18438182,  // todo
+        gasToken: {
+          name: 'BERA',
+          symbol: 'BERA',
           address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
         },
       },

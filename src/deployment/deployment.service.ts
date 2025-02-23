@@ -87,7 +87,7 @@ export class DeploymentService {
         harvestEventsBatchSize: 2000,
         harvestConcurrency: 10,
         multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
-        startBlock: 1453495,  // todo
+        startBlock: 1377587,
         gasToken: {
           name: 'BERA',
           symbol: 'BERA',

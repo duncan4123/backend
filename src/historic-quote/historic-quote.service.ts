@@ -11,6 +11,8 @@ import Decimal from 'decimal.js';
 import { BlockchainType, Deployment, DeploymentService, NATIVE_TOKEN } from '../deployment/deployment.service';
 import { BERACHAIN_NETWORK_ID, CodexService, MANTLE_NETWORK_ID } from '../codex/codex.service';
 
+console.log('HistoricQuoteService file loaded');
+
 type Candlestick = {
   timestamp: number;
   open: string;
@@ -57,15 +59,27 @@ export class HistoricQuoteService implements OnModuleInit {
     private codexService: CodexService,
     private deploymentService: DeploymentService,
   ) {
+    console.log('HistoricQuoteService constructor called');
     this.intervalDuration = +this.configService.get('POLL_HISTORIC_QUOTES_INTERVAL') || 300000;
     this.shouldPollQuotes = this.configService.get('SHOULD_POLL_HISTORIC_QUOTES') === '1';
+    console.log(`HistoricQuoteService configured with: intervalDuration=${this.intervalDuration}, shouldPollQuotes=${this.shouldPollQuotes}`);
   }
 
   onModuleInit() {
+    console.log('HistoricQuoteService onModuleInit called');
     if (this.shouldPollQuotes) {
+      console.log(`Setting up polling interval for historic quotes every ${this.intervalDuration}ms`);
       const callback = () => this.pollForUpdates();
       const interval = setInterval(callback, this.intervalDuration);
       this.schedulerRegistry.addInterval('pollForUpdates', interval);
+      
+      // Optionally trigger an immediate poll on startup
+      console.log('Triggering initial historic quotes poll');
+      this.pollForUpdates().catch(err => 
+        console.error('Error during initial historic quotes poll:', err)
+      );
+    } else {
+      console.log('Historic quotes polling is DISABLED');
     }
   }
 

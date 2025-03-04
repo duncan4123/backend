@@ -46,7 +46,7 @@ export class HistoricQuoteService implements OnModuleInit {
     [BlockchainType.Blast]: [{ name: 'codex', enabled: true }],
     [BlockchainType.Iota]: [{ name: 'coingecko', enabled: true }],
     [BlockchainType.Mantle]: [{ name: 'coingecko', enabled: true }],
-    [BlockchainType.Berachain]: [{ name: 'coingecko', enabled: true }], // todo enable codex
+    [BlockchainType.Berachain]: [{ name: 'codex', enabled: true }], // todo enable codex
   };
 
   constructor(

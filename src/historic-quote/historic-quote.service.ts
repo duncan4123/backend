@@ -120,7 +120,7 @@ export class HistoricQuoteService implements OnModuleInit {
       newQuotes.push(this.repository.create(q));
     }
 
-    const batches = _.chunk(newQuotes, 1000);
+    const batches = _.chunk(newQuotes, 100);
     await Promise.all(batches.map((batch) => this.repository.save(batch)));
     console.log('CoinMarketCap quotes updated');
   }
@@ -183,7 +183,7 @@ export class HistoricQuoteService implements OnModuleInit {
     }
 
     console.log(`Created ${newQuotes.length} new quote entries to save`);
-    const batches = _.chunk(newQuotes, 1000);
+    const batches = _.chunk(newQuotes, 100);
     await Promise.all(batches.map((batch) => this.repository.save(batch)));
     console.log('Codex quotes updated successfully');
   }
@@ -217,7 +217,7 @@ export class HistoricQuoteService implements OnModuleInit {
           }),
         );
 
-        const batches = _.chunk(newQuotes, 1000);
+        const batches = _.chunk(newQuotes, 100);
         await Promise.all(batches.map((batch) => this.repository.save(batch)));
         console.log(`History quote seeding, finished ${++i} of ${tokens.length}%`, new Date());
       }
@@ -276,7 +276,7 @@ export class HistoricQuoteService implements OnModuleInit {
         }
       }
 
-      const batches = _.chunk(newQuotes, 1000);
+      const batches = _.chunk(newQuotes, 100);
       await Promise.all(batches.map((batch) => this.repository.save(batch)));
       console.log(`History quote seeding, finished ${++i} of ${addresses.length}`, new Date());
     }

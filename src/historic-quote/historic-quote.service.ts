@@ -259,60 +259,98 @@ export class HistoricQuoteService implements OnModuleInit {
   }
 
   async seedCodex(blockchainType: BlockchainType, networkId: number): Promise<void> {
+    console.log(`[START] seedCodex for ${blockchainType} with networkId ${networkId}`);
+    
     const start = moment().subtract(1, 'year').unix();
     const end = moment().unix();
+    console.log(`Fetching historical data from ${moment.unix(start).format('YYYY-MM-DD')} to ${moment.unix(end).format('YYYY-MM-DD')}`);
+    
     let i = 0;
 
-    const addresses = await this.codexService.getAllTokenAddresses(networkId);
-    const batchSize = 100;
+    try {
+      const addresses = await this.codexService.getAllTokenAddresses(networkId);
+      console.log(`Got ${addresses?.length || 0} token addresses from Codex for networkId ${networkId}`);
+      
+      const batchSize = 50; // Reduced batch size to avoid payload issues
 
-    const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);
-    const nativeTokenAlias = deployment.nativeTokenAlias ? deployment.nativeTokenAlias : null;
+      const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);
+      const nativeTokenAlias = deployment.nativeTokenAlias ? deployment.nativeTokenAlias : null;
+      console.log(`Native token alias for ${blockchainType}: ${nativeTokenAlias || 'None'}`);
 
-    for (let startIndex = 0; startIndex < addresses.length; startIndex += batchSize) {
-      const batchAddresses = addresses.slice(startIndex, startIndex + batchSize);
+      for (let startIndex = 0; startIndex < addresses.length; startIndex += batchSize) {
+        const batchAddresses = addresses.slice(startIndex, startIndex + batchSize);
+        console.log(`Processing batch ${Math.floor(startIndex/batchSize) + 1} of ${Math.ceil(addresses.length/batchSize)} (${batchAddresses.length} addresses)`);
 
-      // Fetch historical quotes for the current batch of addresses
-      const quotesByAddress = await this.codexService.getHistoricalQuotes(networkId, batchAddresses, start, end);
+        // Fetch historical quotes for the current batch of addresses
+        const quotesByAddress = await this.codexService.getHistoricalQuotes(networkId, batchAddresses, start, end);
+        
+        // Log sample of historical data
+        const sampleAddress = batchAddresses[0];
+        if (sampleAddress && quotesByAddress[sampleAddress] && quotesByAddress[sampleAddress].length > 0) {
+          console.log(`Sample historical data for ${sampleAddress}:`);
+          console.log(`  - Total data points: ${quotesByAddress[sampleAddress].length}`);
+          console.log(`  - First 3 entries:`, JSON.stringify(quotesByAddress[sampleAddress].slice(0, 3)));
+        }
+        
+        // Log summary of data points per token
+        console.log(`Historical data summary for this batch:`);
+        for (const address of batchAddresses) {
+          const quotes = quotesByAddress[address] || [];
+          console.log(`  - ${address}: ${quotes.length} data points`);
+        }
 
-      const newQuotes = [];
+        const newQuotes = [];
 
-      for (const address of batchAddresses) {
-        const quotes = quotesByAddress[address];
+        for (const address of batchAddresses) {
+          const quotes = quotesByAddress[address] || [];
 
-        quotes.forEach((q: any) => {
-          if (q.usd && q.timestamp) {
-            const quote = this.repository.create({
-              tokenAddress: address,
-              usd: q.usd,
-              timestamp: moment.unix(q.timestamp).utc().toISOString(),
-              provider: 'codex',
-              blockchainType: blockchainType,
-            });
-            newQuotes.push(quote);
+          if (quotes.length === 0) {
+            console.warn(`No historical data found for token ${address}`);
+            continue;
           }
-        });
 
-        // If this is the native token alias, also create an entry for the native token
-        if (nativeTokenAlias && address.toLowerCase() === nativeTokenAlias.toLowerCase()) {
           quotes.forEach((q: any) => {
             if (q.usd && q.timestamp) {
-              const nativeTokenQuote = this.repository.create({
-                tokenAddress: NATIVE_TOKEN.toLowerCase(),
+              const quote = this.repository.create({
+                tokenAddress: address,
                 usd: q.usd,
                 timestamp: moment.unix(q.timestamp).utc().toISOString(),
                 provider: 'codex',
                 blockchainType: blockchainType,
               });
-              newQuotes.push(nativeTokenQuote);
+              newQuotes.push(quote);
             }
           });
-        }
-      }
 
-      const batches = _.chunk(newQuotes, 100);
-      await Promise.all(batches.map((batch) => this.repository.save(batch)));
-      console.log(`History quote seeding, finished ${++i} of ${addresses.length}`, new Date());
+          // If this is the native token alias, also create an entry for the native token
+          if (nativeTokenAlias && address.toLowerCase() === nativeTokenAlias.toLowerCase()) {
+            console.log(`Creating native token entries for ${NATIVE_TOKEN} from alias ${nativeTokenAlias}`);
+            quotes.forEach((q: any) => {
+              if (q.usd && q.timestamp) {
+                const nativeTokenQuote = this.repository.create({
+                  tokenAddress: NATIVE_TOKEN.toLowerCase(),
+                  usd: q.usd,
+                  timestamp: moment.unix(q.timestamp).utc().toISOString(),
+                  provider: 'codex',
+                  blockchainType: blockchainType,
+                });
+                newQuotes.push(nativeTokenQuote);
+              }
+            });
+          }
+        }
+
+        console.log(`Created ${newQuotes.length} new historical quote entries to save for batch ${Math.floor(startIndex/batchSize) + 1}`);
+        
+        const batches = _.chunk(newQuotes, 100);
+        await Promise.all(batches.map((batch) => this.repository.save(batch)));
+        console.log(`Saved batch ${++i} of ${Math.ceil(addresses.length/batchSize)}, timestamp: ${new Date().toISOString()}`);
+      }
+      
+      console.log(`[COMPLETE] seedCodex for ${blockchainType} with networkId ${networkId}`);
+    } catch (error) {
+      console.error(`Error in seedCodex for ${blockchainType}: ${error.message}`, error);
+      throw error;
     }
   }
 

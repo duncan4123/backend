@@ -311,7 +311,7 @@ export class HistoricQuoteService implements OnModuleInit {
   async seedCodex(blockchainType: BlockchainType, networkId: number): Promise<void> {
     console.log(`[START] seedCodex for ${blockchainType} with networkId ${networkId}`);
     
-    const start = moment().subtract(1, 'year').unix();
+    const start = moment().subtract(1, 'month').unix();
     const end = moment().unix();
     console.log(`Fetching historical data from ${moment.unix(start).format('YYYY-MM-DD')} to ${moment.unix(end).format('YYYY-MM-DD')}`);
     
@@ -339,7 +339,7 @@ export class HistoricQuoteService implements OnModuleInit {
         if (sampleAddress && quotesByAddress[sampleAddress] && quotesByAddress[sampleAddress].length > 0) {
           console.log(`Sample historical data for ${sampleAddress}:`);
           console.log(`  - Total data points: ${quotesByAddress[sampleAddress].length}`);
-          console.log(`  - First 3 entries:`, JSON.stringify(quotesByAddress[sampleAddress].slice(0, 3)));
+          console.log(`  - First 3 entries:`, JSON.stringify(quotesByAddress[sampleAddress].slice(0, 3), null, 2));
         }
         
         // Log summary of data points per token

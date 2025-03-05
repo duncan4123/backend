@@ -321,6 +321,11 @@ export class HistoricQuoteService implements OnModuleInit {
       const addresses = await this.codexService.getTopTokenAddresses(networkId);
       console.log(`Got ${addresses?.length || 0} top token addresses by volume from Codex for networkId ${networkId}`);
       
+      // Log a sample of the top tokens
+      if (addresses && addresses.length > 0) {
+        console.log(`Top 5 tokens by volume: ${addresses.slice(0, 20).join(', ')}`);
+      }
+      
       const batchSize = 50; // Reduced batch size to avoid payload issues
 
       const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);

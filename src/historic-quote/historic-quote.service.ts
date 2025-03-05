@@ -326,7 +326,7 @@ export class HistoricQuoteService implements OnModuleInit {
     try {
       const addresses = await this.codexService.getTopTokenAddresses(networkId);
       console.log(`Got dunks ${addresses?.length || 0} top token addresses by volume from Codex for networkId ${networkId}`);
-      
+      console.log(`addresses: ${addresses}`);
       // Log a sample of the top tokens
       if (addresses && addresses.length > 0) {
         console.log(`Top 5 tokens by volume: ${addresses.slice(0, 20).join(', ')}`);
@@ -344,7 +344,7 @@ export class HistoricQuoteService implements OnModuleInit {
 
         // Fetch historical quotes for the current batch of addresses
         const quotesByAddress = await this.codexService.getHistoricalQuotes(networkId, batchAddresses, start, end);
-        
+        console.log(`quotesByAddress: ${quotesByAddress}`);
         // Log sample of historical data
         const sampleAddress = batchAddresses[0];
         if (sampleAddress && quotesByAddress[sampleAddress] && quotesByAddress[sampleAddress].length > 0) {
@@ -430,6 +430,7 @@ export class HistoricQuoteService implements OnModuleInit {
       `);
 
       console.log(`Retrieved ${latestQuotes.length} latest quotes for ${blockchainType}`);
+      console.log(`latestQuotes: ${latestQuotes}`);
       
       const result: { [key: string]: HistoricQuote } = {};
       latestQuotes.forEach((quote) => {

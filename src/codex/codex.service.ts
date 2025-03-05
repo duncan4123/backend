@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Codex } from '@codex-data/sdk';
 import moment from 'moment';
 import { BlockchainType, Deployment, NATIVE_TOKEN } from '../deployment/deployment.service';
+import { TokenRankingAttribute, RankingDirection } from '@codex-data/sdk/src/sdk/generated/graphql';
 
 export const SEI_NETWORK_ID = 531;
 export const CELO_NETWORK_ID = 42220;
@@ -165,6 +166,41 @@ export class CodexService {
         return BERACHAIN_NETWORK_ID;
       default:
         return null;
+    }
+  }
+
+  /**
+   * Gets a list of top tokens by volume for a specific network
+   * @param networkId The blockchain network ID
+   * @param limit Maximum number of tokens to return
+   * @returns Array of token addresses sorted by volume
+   */
+  async getTopTokenAddresses(networkId: number, limit: number = 100): Promise<string[]> {
+    try {
+      const result = await this.sdk.queries.filterTokens({
+        filters: {
+          network: [networkId],
+        },
+        rankings: [
+          {
+            attribute: TokenRankingAttribute.Volume24,
+            direction: RankingDirection.Desc
+          }
+        ],
+        limit
+      });
+      
+      // Extract addresses from the results
+      const tokenAddresses = (result.filterTokens?.results || [])
+        .map(item => item.token?.address?.toLowerCase())
+        .filter(Boolean);
+      
+      console.log(`Found ${tokenAddresses.length} top token addresses on network ${networkId}`);
+      
+      return tokenAddresses;
+    } catch (error) {
+      console.error(`Error fetching top token addresses for network ${networkId}:`, error);
+      return []; // Return empty array on error
     }
   }
 }

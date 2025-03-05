@@ -318,8 +318,8 @@ export class HistoricQuoteService implements OnModuleInit {
     let i = 0;
 
     try {
-      const addresses = await this.codexService.getAllTokenAddresses(networkId);
-      console.log(`Got ${addresses?.length || 0} token addresses from Codex for networkId ${networkId}`);
+      const addresses = await this.codexService.getTopTokenAddresses(networkId);
+      console.log(`Got ${addresses?.length || 0} top token addresses by volume from Codex for networkId ${networkId}`);
       
       const batchSize = 50; // Reduced batch size to avoid payload issues
 

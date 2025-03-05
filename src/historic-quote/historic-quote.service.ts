@@ -128,71 +128,98 @@ export class HistoricQuoteService implements OnModuleInit {
   private async updateCodexQuotes(blockchainType: BlockchainType, networkId: number): Promise<void> {
     console.log(`[START] updateCodexQuotes for ${blockchainType} with networkId ${networkId}`);
     
-    const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);
-    console.log(`Got deployment for ${blockchainType}`);
-    
-    const latest = await this.getLatest(blockchainType);
-    console.log(`Got latest quotes for ${blockchainType}, found ${Object.keys(latest).length} entries`);
-    
-    const addresses = await this.codexService.getAllTokenAddresses(networkId);
-    console.log(`Got ${addresses?.length || 0} token addresses from Codex for networkId ${networkId}`);
-    
-    // Process in smaller batches to avoid 413 Payload Too Large errors
-    const batchSize = 50; // Smaller batch size to avoid payload issues
-    const newQuotes = [];
-    
-    for (let i = 0; i < addresses.length; i += batchSize) {
-      const addressBatch = addresses.slice(i, i + batchSize);
-      console.log(`Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(addresses.length/batchSize)}`);
+    try {
+      const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);
+      console.log(`Got deployment for ${blockchainType}`);
       
-      const quotes = await this.codexService.getLatestPrices(deployment, addressBatch);
-      console.log(`Got quotes from Codex for batch: ${Object.keys(quotes || {}).length} entries`);
+      const latest = await this.getLatest(blockchainType);
+      console.log(`Got latest quotes for ${blockchainType}, found ${Object.keys(latest).length} entries`);
       
-      for (const address of Object.keys(quotes || {})) {
-        const quote = quotes[address];
-        if (!quote) {
-          console.warn(`No quote data for address ${address}`);
-          continue;
+      const allAddresses = await this.codexService.getAllTokenAddresses(networkId);
+      console.log(`Got ${allAddresses?.length || 0} token addresses from Codex for networkId ${networkId}`);
+      
+      // Process in smaller batches to avoid 413 Payload Too Large errors
+      const batchSize = 50; // Smaller batch size to avoid payload issues
+      const newQuotes = [];
+      
+      for (let i = 0; i < allAddresses.length; i += batchSize) {
+        const addressBatch = allAddresses.slice(i, i + batchSize);
+        console.log(`Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(allAddresses.length/batchSize)}`);
+        
+        const quotes = await this.codexService.getLatestPrices(deployment, addressBatch);
+        
+        // Log a sample of the quotes data (first 3 entries)
+        const sampleAddresses = Object.keys(quotes || {}).slice(0, 3);
+        console.log(`Sample of quotes data from Codex (first 3 entries):`);
+        for (const addr of sampleAddresses) {
+          console.log(`  - Address: ${addr}, Data:`, JSON.stringify(quotes[addr]));
         }
         
-        const price = `${quote.usd}`;
+        console.log(`Got quotes from Codex for batch: ${Object.keys(quotes || {}).length} entries`);
+        
+        // Log price changes
+        let unchangedCount = 0;
+        let changedCount = 0;
+        
+        for (const address of Object.keys(quotes || {})) {
+          const quote = quotes[address];
+          if (!quote) {
+            console.warn(`No quote data for address ${address}`);
+            continue;
+          }
+          
+          const price = `${quote.usd}`;
+          const existingPrice = latest[address]?.usd;
 
-        if (latest[address] && latest[address].usd === price) continue;
+          if (latest[address] && latest[address].usd === price) {
+            unchangedCount++;
+            continue;
+          }
+          
+          changedCount++;
+          console.log(`Price change for ${address}: ${existingPrice || 'N/A'} -> ${price}`);
 
-        newQuotes.push(
-          this.repository.create({
-            tokenAddress: address,
-            usd: quote.usd,
-            timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
-            provider: 'codex',
-            blockchainType: blockchainType,
-          }),
-        );
-      }
-
-      if (deployment.nativeTokenAlias && addressBatch.includes(deployment.nativeTokenAlias)) {
-        console.log(`Processing native token alias ${deployment.nativeTokenAlias}`);
-        const quote = quotes[deployment.nativeTokenAlias];
-        if (quote) {
           newQuotes.push(
             this.repository.create({
-              tokenAddress: NATIVE_TOKEN.toLowerCase(),
+              tokenAddress: address,
               usd: quote.usd,
               timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
               provider: 'codex',
-              blockchainType: deployment.blockchainType,
+              blockchainType: blockchainType,
             }),
           );
-        } else {
-          console.warn(`No quote found for native token alias ${deployment.nativeTokenAlias}`);
+        }
+        
+        console.log(`Price comparison: ${changedCount} changed, ${unchangedCount} unchanged`);
+
+        if (deployment.nativeTokenAlias && addressBatch.includes(deployment.nativeTokenAlias)) {
+          console.log(`Processing native token alias ${deployment.nativeTokenAlias}`);
+          const quote = quotes[deployment.nativeTokenAlias];
+          if (quote) {
+            console.log(`Native token price data:`, JSON.stringify(quote));
+            newQuotes.push(
+              this.repository.create({
+                tokenAddress: NATIVE_TOKEN.toLowerCase(),
+                usd: quote.usd,
+                timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
+                provider: 'codex',
+                blockchainType: deployment.blockchainType,
+              }),
+            );
+          } else {
+            console.warn(`No quote found for native token alias ${deployment.nativeTokenAlias}`);
+          }
         }
       }
-    }
 
-    console.log(`Created ${newQuotes.length} new quote entries to save`);
-    const batches = _.chunk(newQuotes, 100);
-    await Promise.all(batches.map((batch) => this.repository.save(batch)));
-    console.log('Codex quotes updated successfully');
+      console.log(`Created ${newQuotes.length} new quote entries to save`);
+      const batches = _.chunk(newQuotes, 100);
+      await Promise.all(batches.map((batch) => this.repository.save(batch)));
+      console.log('Codex quotes updated successfully');
+    } catch (error) {
+      console.error(`Error in updateCodexQuotes for ${blockchainType}: ${error.message}`, error);
+      throw error; // Re-throw to ensure the error is properly handled upstream
+    }
   }
 
   async seed(): Promise<void> {

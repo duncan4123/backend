@@ -67,6 +67,20 @@ export class HistoricQuoteService implements OnModuleInit {
       const interval = setInterval(callback, this.intervalDuration);
       this.schedulerRegistry.addInterval('pollForUpdates', interval);
     }
+    
+    // Uncomment to run seeding on startup
+    this.seedOnStartup();
+  }
+
+  private async seedOnStartup() {
+    const shouldSeedOnStartup = this.configService.get('SEED_CODEX_ON_STARTUP') === '1';
+    if (shouldSeedOnStartup) {
+      console.log('Starting to seed Codex data...');
+      // Seed for specific blockchain types
+      await this.seedCodex(BlockchainType.Sei);
+      // Add more blockchain types as needed
+      console.log('Codex data seeding completed');
+    }
   }
 
   async pollForUpdates(): Promise<void> {

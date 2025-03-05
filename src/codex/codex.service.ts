@@ -163,6 +163,8 @@ export class CodexService {
     const tokens = await this.fetchTopTokens(networkId);
     const uniqueAddresses = Array.from(new Set(tokens.map((t) => t.token.address.toLowerCase())));
     return uniqueAddresses;
+    console.log(uniqueAddresses);
+    
   }
 
   private async fetchTopTokens(networkId: number, addresses?: string[]) {

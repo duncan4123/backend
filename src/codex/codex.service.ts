@@ -1,16 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Codex } from '@codex-data/sdk';
-
 import moment from 'moment';
 import { BlockchainType, Deployment, NATIVE_TOKEN } from '../deployment/deployment.service';
-import { TokenRankingAttribute, RankingDirection } from '@codex-data/sdk/src/sdk/generated/graphql';
 
-export const SEI_NETWORK_ID = 531;
-export const CELO_NETWORK_ID = 42220;
-export const ETHEREUM_NETWORK_ID = 1;
-export const MANTLE_NETWORK_ID = 5000;
-export const BERACHAIN_NETWORK_ID = 80094;
+export const NETWORK_IDS = {
+  [BlockchainType.Sei]: 531,
+  [BlockchainType.Celo]: 42220,
+  [BlockchainType.Ethereum]: 1,
+  [BlockchainType.Mantle]: 5000,
+  [BlockchainType.Blast]: 81457,
+  [BlockchainType.Berachain]: 80094,
+};
 
 @Injectable()
 export class CodexService {
@@ -22,17 +23,15 @@ export class CodexService {
   }
 
   async getLatestPrices(deployment: Deployment, addresses: string[]): Promise<any> {
-    const networkId = this.getNetworkId(deployment.blockchainType);
-    if (!networkId) return null;
+    if (addresses.length === 0) return {};
 
-    const originalAddresses = [...addresses];
-    let nativeTokenAliasUsed = false;
+    const networkId = NETWORK_IDS[deployment.blockchainType];
+    if (!networkId) return null;
 
     // Replace only if targetAddress (NATIVE_TOKEN) is present in addresses
     if (deployment.nativeTokenAlias) {
       addresses = addresses.map((address) => {
         if (address.toLowerCase() === NATIVE_TOKEN.toLowerCase()) {
-          nativeTokenAliasUsed = true;
           return deployment.nativeTokenAlias;
         }
         return address;
@@ -44,14 +43,9 @@ export class CodexService {
 
     tokens.forEach((t) => {
       const address = t.token.address.toLowerCase();
-      const originalAddress = originalAddresses.find(
-        (addr) =>
-          addr.toLowerCase() === address || (nativeTokenAliasUsed && addr.toLowerCase() === NATIVE_TOKEN.toLowerCase()),
-      );
-
-      if (originalAddress) {
-        result[originalAddress.toLowerCase()] = {
-          address: originalAddress.toLowerCase(),
+      if (address) {
+        result[address] = {
+          address,
           usd: Number(t.priceUSD),
           provider: 'codex',
           last_updated_at: moment().unix(),
@@ -59,16 +53,26 @@ export class CodexService {
       }
     });
 
+    if (deployment.nativeTokenAlias && result[deployment.nativeTokenAlias.toLowerCase()]) {
+      result[NATIVE_TOKEN.toLowerCase()] = {
+        address: NATIVE_TOKEN.toLowerCase(),
+        usd: result[deployment.nativeTokenAlias.toLowerCase()].usd,
+        provider: 'codex',
+        last_updated_at: moment().unix(),
+      };
+    }
+
     return result;
   }
 
-  async getHistoricalQuotes(networkId: number, tokenAddresses: string[], from: number, to: number) {
+  async getHistoricalQuotes(deployment: Deployment, tokenAddresses: string[], from: number, to: number) {
     const limit = (await import('p-limit')).default;
     const concurrencyLimit = limit(1);
     const maxPoints = 1499;
     const resolution = 240; // Resolution in minutes (adjustable here)
     const resolutionSeconds = resolution * 60; // Convert resolution to seconds
     const maxBatchDuration = maxPoints * resolutionSeconds; // Max batch duration in seconds
+    const networkId = NETWORK_IDS[deployment.blockchainType];
 
     const fetchWithRetry = async (tokenAddress: string, batchFrom: number, batchTo: number): Promise<any> => {
       try {
@@ -118,7 +122,8 @@ export class CodexService {
     }
   }
 
-  async getAllTokenAddresses(networkId: number): Promise<string[]> {
+  async getAllTokenAddresses(deployment: Deployment): Promise<string[]> {
+    const networkId = NETWORK_IDS[deployment.blockchainType];
     const tokens = await this.fetchTokens(networkId);
     const uniqueAddresses = Array.from(new Set(tokens.map((t) => t.token.address.toLowerCase())));
     return uniqueAddresses;
@@ -153,55 +158,45 @@ export class CodexService {
     return allTokens;
   }
 
-  private getNetworkId(blockchainType: string): number {
-    switch (blockchainType) {
-      case BlockchainType.Sei:
-        return SEI_NETWORK_ID;
-      case BlockchainType.Celo:
-        return CELO_NETWORK_ID;
-      case BlockchainType.Ethereum:
-        return ETHEREUM_NETWORK_ID;
-      case BlockchainType.Mantle:
-        return MANTLE_NETWORK_ID;
-      case BlockchainType.Berachain:
-        return BERACHAIN_NETWORK_ID;
-      default:
-        return null;
-    }
+  async getTopTokenAddresses(deployment: Deployment): Promise<string[]> {
+    const networkId = NETWORK_IDS[deployment.blockchainType];
+    const tokens = await this.fetchTopTokens(networkId);
+    const uniqueAddresses = Array.from(new Set(tokens.map((t) => t.token.address.toLowerCase())));
+    return uniqueAddresses;
   }
 
-  /**
-   * Gets a list of top tokens by volume for a specific network
-   * @param networkId The blockchain network ID
-   * @param limit Maximum number of tokens to return
-   * @returns Array of token addresses sorted by volume
-   */
-  async getTopTokenAddresses(networkId: number, limit: number = 100): Promise<string[]> {
-    try {
-      const result = await this.sdk.queries.filterTokens({
-        filters: {
-          network: [networkId],
-        },
-        rankings: [
-          {
-            attribute: "volume24h" as any,
-            direction: "DESC" as any
-          }
-        ],
-        limit
-      });
-      
-      // Extract addresses from the results
-      const tokenAddresses = (result.filterTokens?.results || [])
-        .map(item => item.token?.address?.toLowerCase())
-        .filter(Boolean);
-      
-      console.log(`Found ${tokenAddresses.length} top token addresses on network ${networkId}`);
-      
-      return tokenAddresses;
-    } catch (error) {
-      console.error(`Error fetching top token addresses for network ${networkId}:`, error);
-      return []; // Return empty array on error
-    }
+  private async fetchTopTokens(networkId: number, addresses?: string[]) {
+    const limit = 50;
+    let offset = 0;
+    let allTokens = [];
+    let fetched = [];
+
+    do {
+      try {
+        const result = await this.sdk.queries.filterTokens({
+          filters: {
+            network: [networkId],
+          },
+          tokens: addresses || undefined, // Use addresses if provided, otherwise fetch all
+          rankings: {
+            // Prevent import from generated types (https://docs.codex.io/reference/enums#tokenrankingattribute)
+            attribute: 'volume24' as any,
+            // https://docs.codex.io/reference/enums#rankingdirection
+            direction: 'DESC' as any,
+          },
+          limit,
+          offset,
+        });
+
+        fetched = result.filterTokens.results;
+        allTokens = [...allTokens, ...fetched];
+        offset += limit;
+      } catch (error) {
+        console.error('Error fetching tokens:', error);
+        throw error;
+      }
+    } while (fetched.length === limit);
+
+    return allTokens;
   }
 }

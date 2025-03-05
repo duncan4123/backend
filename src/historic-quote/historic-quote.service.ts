@@ -9,9 +9,7 @@ import * as _ from 'lodash';
 import moment from 'moment';
 import Decimal from 'decimal.js';
 import { BlockchainType, Deployment, DeploymentService, NATIVE_TOKEN } from '../deployment/deployment.service';
-import { BERACHAIN_NETWORK_ID, CodexService, MANTLE_NETWORK_ID } from '../codex/codex.service';
-
-console.log('HistoricQuoteService file loaded');
+import { CodexService } from '../codex/codex.service';
 
 type Candlestick = {
   timestamp: number;
@@ -40,7 +38,7 @@ export class HistoricQuoteService implements OnModuleInit {
   private shouldPollQuotes: boolean;
   private priceProviders: BlockchainProviderConfig = {
     [BlockchainType.Ethereum]: [
-      { name: 'coinmarketcap', enabled: false },
+      { name: 'coinmarketcap', enabled: true },
       { name: 'codex', enabled: true },
     ],
     [BlockchainType.Sei]: [{ name: 'codex', enabled: true }],
@@ -48,7 +46,7 @@ export class HistoricQuoteService implements OnModuleInit {
     [BlockchainType.Blast]: [{ name: 'codex', enabled: true }],
     [BlockchainType.Iota]: [{ name: 'coingecko', enabled: true }],
     [BlockchainType.Mantle]: [{ name: 'coingecko', enabled: true }],
-    [BlockchainType.Berachain]: [{ name: 'codex', enabled: true }], // todo enable codex
+    [BlockchainType.Berachain]: [{ name: 'codex', enabled: true }],
   };
 
   constructor(
@@ -59,69 +57,40 @@ export class HistoricQuoteService implements OnModuleInit {
     private codexService: CodexService,
     private deploymentService: DeploymentService,
   ) {
-    console.log('HistoricQuoteService constructor called');
     this.intervalDuration = +this.configService.get('POLL_HISTORIC_QUOTES_INTERVAL') || 300000;
     this.shouldPollQuotes = this.configService.get('SHOULD_POLL_HISTORIC_QUOTES') === '1';
-    console.log(`HistoricQuoteService configured with: intervalDuration=${this.intervalDuration}, shouldPollQuotes=${this.shouldPollQuotes}`);
   }
 
   onModuleInit() {
-    console.log('HistoricQuoteService onModuleInit called');
     if (this.shouldPollQuotes) {
-      console.log(`Setting up polling interval for historic quotes every ${this.intervalDuration}ms`);
       const callback = () => this.pollForUpdates();
       const interval = setInterval(callback, this.intervalDuration);
       this.schedulerRegistry.addInterval('pollForUpdates', interval);
-      
-      // Optionally trigger an immediate poll on startup
-      console.log('Triggering initial historic quotes poll');
-      this.pollForUpdates().catch(err => 
-        console.error('Error during initial historic quotes poll:', err)
-      );
-      
-      // Add this code to seed historical data for Berachain
-      console.log('Seeding historical Codex data for Berachain');
-      this.seedCodex(BlockchainType.Berachain, BERACHAIN_NETWORK_ID)
-        .then(() => console.log('Successfully seeded historical data for Berachain'))
-        .catch(err => console.error('Error seeding historical data for Berachain:', err));
-    } else {
-      console.log('Historic quotes polling is DISABLED');
     }
   }
 
   async pollForUpdates(): Promise<void> {
-    if (this.isPolling) {
-      console.log('Skipping poll as previous poll is still running');
-      return;
-    }
+    if (this.isPolling) return;
     this.isPolling = true;
-    console.log('[START] pollForUpdates at', new Date().toISOString());
 
     try {
-      console.log('Starting to update quotes for Mantle and Berachain');
-      const results = await Promise.all([
-        // await this.updateCoinMarketCapQuotes(),
-        // await this.updateCodexQuotes(BlockchainType.Sei, SEI_NETWORK_ID),
-        // await this.updateCodexQuotes(BlockchainType.Celo, CELO_NETWORK_ID),
-        this.updateCodexQuotes(BlockchainType.Mantle, MANTLE_NETWORK_ID)
-          .then(count => ({ blockchain: 'Mantle', count, success: true }))
-          .catch(err => ({ blockchain: 'Mantle', error: err.message, success: false })),
-        this.updateCodexQuotes(BlockchainType.Berachain, BERACHAIN_NETWORK_ID)
-          .then(count => ({ blockchain: 'Berachain', count, success: true }))
-          .catch(err => ({ blockchain: 'Berachain', error: err.message, success: false })),
+      await Promise.all([
+        await this.updateCoinMarketCapQuotes(),
+        await this.updateCodexQuotes(BlockchainType.Sei),
+        await this.updateCodexQuotes(BlockchainType.Celo),
+        await this.updateCodexQuotes(BlockchainType.Berachain),
       ]);
-      
-      console.log('Quote update results:', JSON.stringify(results));
     } catch (error) {
       console.error('Error updating historic quotes:', error);
-    } finally {
       this.isPolling = false;
-      console.log('[END] pollForUpdates at', new Date().toISOString());
     }
+
+    this.isPolling = false;
+    console.log('Historic quotes updated');
   }
 
   private async updateCoinMarketCapQuotes(): Promise<void> {
-    const latest = await this.getLatest(BlockchainType.Berachain); // Pass the deployment to filter by blockchainType
+    const latest = await this.getLatest(BlockchainType.Ethereum); // Pass the deployment to filter by blockchainType
     const quotes = await this.coinmarketcapService.getLatestQuotes();
     const newQuotes = [];
 
@@ -135,147 +104,51 @@ export class HistoricQuoteService implements OnModuleInit {
       newQuotes.push(this.repository.create(q));
     }
 
-    const batches = _.chunk(newQuotes, 100);
+    const batches = _.chunk(newQuotes, 1000);
     await Promise.all(batches.map((batch) => this.repository.save(batch)));
     console.log('CoinMarketCap quotes updated');
   }
 
-  private async updateCodexQuotes(blockchainType: BlockchainType, networkId: number): Promise<number> {
-    console.log(`[START] updateCodexQuotes for ${blockchainType} with networkId ${networkId} at ${new Date().toISOString()}`);
-    
-    try {
-      const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);
-      console.log(`Got deployment for ${blockchainType}:`, JSON.stringify(deployment));
-      
-      const latest = await this.getLatest(blockchainType);
-      console.log(`Got latest quotes for ${blockchainType}, found ${Object.keys(latest).length} entries`);
-      
-      const allAddresses = await this.codexService.getAllTokenAddresses(networkId);
-      console.log(`Got ${allAddresses?.length || 0} token addresses from Codex for networkId ${networkId}`);
-      
-      if (!allAddresses || allAddresses.length === 0) {
-        console.warn(`No token addresses returned from Codex for networkId ${networkId}`);
-        return 0;
-      }
-      
-      // Process in smaller batches to avoid 413 Payload Too Large errors
-      const batchSize = 50; // Smaller batch size to avoid payload issues
-      const newQuotes = [];
-      let totalProcessed = 0;
-      let totalChanged = 0;
-      
-      for (let i = 0; i < allAddresses.length; i += batchSize) {
-        const addressBatch = allAddresses.slice(i, i + batchSize);
-        console.log(`Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(allAddresses.length/batchSize)} (${addressBatch.length} addresses)`);
-        
-        try {
-          const quotes = await this.codexService.getLatestPrices(deployment, addressBatch);
-          console.log(`Got quotes from Codex for batch: ${Object.keys(quotes || {}).length} entries`);
-          
-          if (!quotes || Object.keys(quotes).length === 0) {
-            console.warn(`No quotes returned from Codex for this batch`);
-            continue;
-          }
-          
-          // Log the complete structure of the first quote to see all available fields
-          const firstAddress = Object.keys(quotes)[0];
-          if (firstAddress) {
-            console.log(`Complete data structure for first token (${firstAddress}):`);
-            console.log(JSON.stringify(quotes[firstAddress], null, 2));
-          }
-          
-          // Log price changes
-          let unchangedCount = 0;
-          let changedCount = 0;
-          
-          for (const address of Object.keys(quotes || {})) {
-            totalProcessed++;
-            const quote = quotes[address];
-            if (!quote) {
-              console.warn(`No quote data for address ${address}`);
-              continue;
-            }
-            
-            const price = `${quote.usd}`;
-            const existingPrice = latest[address]?.usd;
+  private async updateCodexQuotes(blockchainType: BlockchainType): Promise<void> {
+    const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);
+    const latest = await this.getLatest(blockchainType);
+    const addresses = await this.codexService.getAllTokenAddresses(deployment);
+    const quotes = await this.codexService.getLatestPrices(deployment, addresses);
+    const newQuotes = [];
 
-            if (latest[address] && latest[address].usd === price) {
-              unchangedCount++;
-              continue;
-            }
-            
-            changedCount++;
-            totalChanged++;
-            console.log(`Price change for ${address}: ${existingPrice || 'N/A'} -> ${price}`);
+    for (const address of Object.keys(quotes)) {
+      const quote = quotes[address];
+      const price = `${quote.usd}`;
 
-            newQuotes.push(
-              this.repository.create({
-                tokenAddress: address,
-                usd: quote.usd,
-                timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
-                provider: 'codex',
-                blockchainType: blockchainType,
-              }),
-            );
-          }
-          
-          console.log(`Price comparison for batch: ${changedCount} changed, ${unchangedCount} unchanged`);
-        } catch (error) {
-          console.error(`Error processing batch ${Math.floor(i/batchSize) + 1}:`, error);
-        }
+      if (latest[address] && latest[address].usd === price) continue;
 
-        if (deployment.nativeTokenAlias && addressBatch.includes(deployment.nativeTokenAlias)) {
-          console.log(`Processing native token alias ${deployment.nativeTokenAlias}`);
-          try {
-            const quotes = await this.codexService.getLatestPrices(deployment, [deployment.nativeTokenAlias]);
-            const quote = quotes[deployment.nativeTokenAlias];
-            if (quote) {
-              console.log(`Native token price data:`, JSON.stringify(quote));
-              newQuotes.push(
-                this.repository.create({
-                  tokenAddress: NATIVE_TOKEN.toLowerCase(),
-                  usd: quote.usd,
-                  timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
-                  provider: 'codex',
-                  blockchainType: deployment.blockchainType,
-                }),
-              );
-              totalChanged++;
-            } else {
-              console.warn(`No quote found for native token alias ${deployment.nativeTokenAlias}`);
-            }
-          } catch (error) {
-            console.error(`Error processing native token:`, error);
-          }
-        }
-      }
-
-      console.log(`Created ${newQuotes.length} new quote entries to save (${totalChanged} price changes out of ${totalProcessed} tokens processed)`);
-      
-      if (newQuotes.length > 0) {
-        const batches = _.chunk(newQuotes, 100);
-        let savedCount = 0;
-        for (let i = 0; i < batches.length; i++) {
-          try {
-            const batch = batches[i];
-            await this.repository.save(batch);
-            savedCount += batch.length;
-            console.log(`Saved batch ${i+1}/${batches.length} (${batch.length} quotes)`);
-          } catch (error) {
-            console.error(`Error saving batch ${i+1}:`, error);
-          }
-        }
-        console.log(`Successfully saved ${savedCount}/${newQuotes.length} quotes`);
-      } else {
-        console.log('No new quotes to save');
-      }
-      
-      console.log(`[END] updateCodexQuotes for ${blockchainType} completed at ${new Date().toISOString()}`);
-      return newQuotes.length;
-    } catch (error) {
-      console.error(`[ERROR] updateCodexQuotes for ${blockchainType}: ${error.message}`, error);
-      throw error;
+      newQuotes.push(
+        this.repository.create({
+          tokenAddress: address,
+          usd: quote.usd,
+          timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
+          provider: 'codex',
+          blockchainType: blockchainType,
+        }),
+      );
     }
+
+    if (deployment.nativeTokenAlias) {
+      const quote = quotes[deployment.nativeTokenAlias];
+      newQuotes.push(
+        this.repository.create({
+          tokenAddress: NATIVE_TOKEN.toLowerCase(),
+          usd: quote.usd,
+          timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
+          provider: 'codex',
+          blockchainType: deployment.blockchainType,
+        }),
+      );
+    }
+
+    const batches = _.chunk(newQuotes, 1000);
+    await Promise.all(batches.map((batch) => this.repository.save(batch)));
+    console.log('Codex quotes updated');
   }
 
   async seed(): Promise<void> {
@@ -307,141 +180,89 @@ export class HistoricQuoteService implements OnModuleInit {
           }),
         );
 
-        const batches = _.chunk(newQuotes, 100);
+        const batches = _.chunk(newQuotes, 1000);
         await Promise.all(batches.map((batch) => this.repository.save(batch)));
         console.log(`History quote seeding, finished ${++i} of ${tokens.length}%`, new Date());
       }
     }
   }
 
-  async seedCodex(blockchainType: BlockchainType, networkId: number): Promise<void> {
-    console.log(`[START] seedCodex for ${blockchainType} with networkId ${networkId}`);
-    
-    const start = moment().subtract(1, 'month').unix();
+  async seedCodex(blockchainType: BlockchainType): Promise<void> {
+    const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);
+    const start = moment().subtract(1, 'year').unix();
     const end = moment().unix();
-    console.log(`Fetching historical data from ${moment.unix(start).format('YYYY-MM-DD')} to ${moment.unix(end).format('YYYY-MM-DD')}`);
-    
     let i = 0;
 
-    try {
-      const addresses = await this.codexService.getTopTokenAddresses(networkId);
-      console.log(`Got dunks ${addresses?.length || 0} top token addresses by volume from Codex for networkId ${networkId}`);
-      console.log(`addresses: ${addresses}`);
-      // Log a sample of the top tokens
-      if (addresses && addresses.length > 0) {
-        console.log(`Top 5 tokens by volume: ${addresses.slice(0, 20).join(', ')}`);
-      }
-      
-      const batchSize = 50; // Reduced batch size to avoid payload issues
+    const addresses = await this.codexService.getTopTokenAddresses(deployment);
+    const batchSize = 100;
 
-      const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);
-      const nativeTokenAlias = deployment.nativeTokenAlias ? deployment.nativeTokenAlias : null;
-      console.log(`Native token alias for ${blockchainType}: ${nativeTokenAlias || 'None'}`);
+    const nativeTokenAlias = deployment.nativeTokenAlias ? deployment.nativeTokenAlias : null;
 
-      for (let startIndex = 0; startIndex < addresses.length; startIndex += batchSize) {
-        const batchAddresses = addresses.slice(startIndex, startIndex + batchSize);
-        console.log(`Processing batch ${Math.floor(startIndex/batchSize) + 1} of ${Math.ceil(addresses.length/batchSize)} (${batchAddresses.length} addresses)`);
+    for (let startIndex = 0; startIndex < addresses.length; startIndex += batchSize) {
+      const batchAddresses = addresses.slice(startIndex, startIndex + batchSize);
 
-        // Fetch historical quotes for the current batch of addresses
-        const quotesByAddress = await this.codexService.getHistoricalQuotes(networkId, batchAddresses, start, end);
-        console.log(`quotesByAddress: ${quotesByAddress}`);
-        // Log sample of historical data
-        const sampleAddress = batchAddresses[0];
-        if (sampleAddress && quotesByAddress[sampleAddress] && quotesByAddress[sampleAddress].length > 0) {
-          console.log(`Sample historical data for ${sampleAddress}:`);
-          console.log(`  - Total data points: ${quotesByAddress[sampleAddress].length}`);
-          console.log(`  - First 3 entries:`, JSON.stringify(quotesByAddress[sampleAddress].slice(0, 3), null, 2));
-        }
-        
-        // Log summary of data points per token
-        console.log(`Historical data summary for this batch:`);
-        for (const address of batchAddresses) {
-          const quotes = quotesByAddress[address] || [];
-          console.log(`  - ${address}: ${quotes.length} data points`);
-        }
+      // Fetch historical quotes for the current batch of addresses
+      const quotesByAddress = await this.codexService.getHistoricalQuotes(deployment, batchAddresses, start, end);
 
-        const newQuotes = [];
+      const newQuotes = [];
 
-        for (const address of batchAddresses) {
-          const quotes = quotesByAddress[address] || [];
+      for (const address of batchAddresses) {
+        const quotes = quotesByAddress[address];
 
-          if (quotes.length === 0) {
-            console.warn(`No historical data found for token ${address}`);
-            continue;
+        quotes.forEach((q: any) => {
+          if (q.usd && q.timestamp) {
+            const quote = this.repository.create({
+              tokenAddress: address,
+              usd: q.usd,
+              timestamp: moment.unix(q.timestamp).utc().toISOString(),
+              provider: 'codex',
+              blockchainType: blockchainType,
+            });
+            newQuotes.push(quote);
           }
+        });
 
+        // If this is the native token alias, also create an entry for the native token
+        if (nativeTokenAlias && address.toLowerCase() === nativeTokenAlias.toLowerCase()) {
           quotes.forEach((q: any) => {
             if (q.usd && q.timestamp) {
-              const quote = this.repository.create({
-                tokenAddress: address,
+              const nativeTokenQuote = this.repository.create({
+                tokenAddress: NATIVE_TOKEN.toLowerCase(),
                 usd: q.usd,
                 timestamp: moment.unix(q.timestamp).utc().toISOString(),
                 provider: 'codex',
                 blockchainType: blockchainType,
               });
-              newQuotes.push(quote);
+              newQuotes.push(nativeTokenQuote);
             }
           });
-
-          // If this is the native token alias, also create an entry for the native token
-          if (nativeTokenAlias && address.toLowerCase() === nativeTokenAlias.toLowerCase()) {
-            console.log(`Creating native token entries for ${NATIVE_TOKEN} from alias ${nativeTokenAlias}`);
-            quotes.forEach((q: any) => {
-              if (q.usd && q.timestamp) {
-                const nativeTokenQuote = this.repository.create({
-                  tokenAddress: NATIVE_TOKEN.toLowerCase(),
-                  usd: q.usd,
-                  timestamp: moment.unix(q.timestamp).utc().toISOString(),
-                  provider: 'codex',
-                  blockchainType: blockchainType,
-                });
-                newQuotes.push(nativeTokenQuote);
-              }
-            });
-          }
         }
-
-        console.log(`Created ${newQuotes.length} new historical quote entries to save for batch ${Math.floor(startIndex/batchSize) + 1}`);
-        
-        const batches = _.chunk(newQuotes, 100);
-        await Promise.all(batches.map((batch) => this.repository.save(batch)));
-        console.log(`Saved batch ${++i} of ${Math.ceil(addresses.length/batchSize)}, timestamp: ${new Date().toISOString()}`);
       }
-      
-      console.log(`[COMPLETE] seedCodex for ${blockchainType} with networkId ${networkId}`);
-    } catch (error) {
-      console.error(`Error in seedCodex for ${blockchainType}: ${error.message}`, error);
-      throw error;
+
+      const batches = _.chunk(newQuotes, 1000);
+      await Promise.all(batches.map((batch) => this.repository.save(batch)));
+      console.log(`History quote seeding, finished ${++i} of ${addresses.length}`, new Date());
     }
   }
 
   async getLatest(blockchainType: BlockchainType): Promise<{ [key: string]: HistoricQuote }> {
-    console.log(`[START] api called for getLatest for ${blockchainType}`);
-    try {
-      const latestQuotes = await this.repository.query(`
-        SELECT 
-            "tokenAddress",
-            "blockchainType",
-            last(usd, "timestamp") AS usd,
-            last("timestamp", "timestamp") AS timestamp
-        FROM "historic-quotes"
-        WHERE "blockchainType" = '${blockchainType}'
-        GROUP BY "tokenAddress", "blockchainType";
-      `);
+    const latestQuotes = await this.repository.query(`
+      SELECT 
+          "tokenAddress",
+          "blockchainType",
+          last(usd, "timestamp") AS usd,
+          last("timestamp", "timestamp") AS timestamp
+      FROM "historic-quotes"
+      WHERE "blockchainType" = '${blockchainType}'
+      GROUP BY "tokenAddress", "blockchainType";
+    `);
 
-      console.log(`Retrieved ${latestQuotes.length} latest quotes for ${blockchainType}`);
-      console.log(`latestQuotes: ${latestQuotes}`);
-      
-      const result: { [key: string]: HistoricQuote } = {};
-      latestQuotes.forEach((quote) => {
-        result[quote.tokenAddress] = quote;
-      });
+    const result: { [key: string]: HistoricQuote } = {};
+    latestQuotes.forEach((quote) => {
+      result[quote.tokenAddress] = quote;
+    });
 
-      return result;
-    } catch (error) {
-      console.error(`[ERROR] getLatest for ${blockchainType}:`, error);
-      throw error;
-    }
+    return result;
   }
 
   async getHistoryQuotes(addresses: string[], start: number, end: number): Promise<{ [key: string]: HistoricQuote[] }> {
@@ -539,6 +360,10 @@ export class HistoricQuoteService implements OnModuleInit {
     const candlesByAddress: { [key: string]: Candlestick[] } = {};
 
     result.forEach((row: any) => {
+      if (!row.open) {
+        return;
+      }
+
       const timestamp = moment(row.bucket).utc();
 
       if (timestamp.isSameOrAfter(startQ)) {
@@ -592,7 +417,7 @@ export class HistoricQuoteService implements OnModuleInit {
       const quote = data[tokenB][i];
 
       // Skip if either close price is null
-      if (base.close === null || quote.close === null) {
+      if (!base || !quote || base.close === null || quote.close === null) {
         return;
       }
 

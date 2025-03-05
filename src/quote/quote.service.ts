@@ -95,6 +95,8 @@ export class QuoteService implements OnModuleInit {
         newPrices = await this.codexService.getLatestPrices(deployment, addresses);
       } else if (deployment.blockchainType === BlockchainType.Celo) {
         newPrices = await this.codexService.getLatestPrices(deployment, addresses);
+      } else if (deployment.blockchainType === BlockchainType.Berachain) {
+        newPrices = await this.codexService.getLatestPrices(deployment, addresses);
       } else {
         newPrices = await this.coingeckoService.getLatestPrices(addresses, deployment);
         const gasTokenPrice = await this.coingeckoService.getLatestGasTokenPrice(deployment);

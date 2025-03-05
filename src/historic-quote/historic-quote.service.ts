@@ -171,11 +171,11 @@ export class HistoricQuoteService implements OnModuleInit {
             continue;
           }
           
-          // Log a sample of the quotes data (first 3 entries)
-          const sampleAddresses = Object.keys(quotes || {}).slice(0, 3);
-          console.log(`Sample of quotes data from Codex (first 3 entries):`);
-          for (const addr of sampleAddresses) {
-            console.log(`  - Address: ${addr}, Data:`, JSON.stringify(quotes[addr]));
+          // Log the complete structure of the first quote to see all available fields
+          const firstAddress = Object.keys(quotes)[0];
+          if (firstAddress) {
+            console.log(`Complete data structure for first token (${firstAddress}):`);
+            console.log(JSON.stringify(quotes[firstAddress], null, 2));
           }
           
           // Log price changes

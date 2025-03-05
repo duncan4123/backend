@@ -78,6 +78,12 @@ export class HistoricQuoteService implements OnModuleInit {
       this.pollForUpdates().catch(err => 
         console.error('Error during initial historic quotes poll:', err)
       );
+      
+      // Add this code to seed historical data for Berachain
+      console.log('Seeding historical Codex data for Berachain');
+      this.seedCodex(BlockchainType.Berachain, BERACHAIN_NETWORK_ID)
+        .then(() => console.log('Successfully seeded historical data for Berachain'))
+        .catch(err => console.error('Error seeding historical data for Berachain:', err));
     } else {
       console.log('Historic quotes polling is DISABLED');
     }
@@ -319,7 +325,7 @@ export class HistoricQuoteService implements OnModuleInit {
 
     try {
       const addresses = await this.codexService.getTopTokenAddresses(networkId);
-      console.log(`Got ${addresses?.length || 0} top token addresses by volume from Codex for networkId ${networkId}`);
+      console.log(`Got dunks ${addresses?.length || 0} top token addresses by volume from Codex for networkId ${networkId}`);
       
       // Log a sample of the top tokens
       if (addresses && addresses.length > 0) {
@@ -410,7 +416,7 @@ export class HistoricQuoteService implements OnModuleInit {
   }
 
   async getLatest(blockchainType: BlockchainType): Promise<{ [key: string]: HistoricQuote }> {
-    console.log(`[START] getLatest for ${blockchainType}`);
+    console.log(`[START] api called for getLatest for ${blockchainType}`);
     try {
       const latestQuotes = await this.repository.query(`
         SELECT 

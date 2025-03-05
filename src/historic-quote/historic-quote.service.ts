@@ -84,25 +84,34 @@ export class HistoricQuoteService implements OnModuleInit {
   }
 
   async pollForUpdates(): Promise<void> {
-    if (this.isPolling) return;
+    if (this.isPolling) {
+      console.log('Skipping poll as previous poll is still running');
+      return;
+    }
     this.isPolling = true;
-    console.log('[START] pollForUpdates');
+    console.log('[START] pollForUpdates at', new Date().toISOString());
 
     try {
-      await Promise.all([
+      console.log('Starting to update quotes for Mantle and Berachain');
+      const results = await Promise.all([
         // await this.updateCoinMarketCapQuotes(),
         // await this.updateCodexQuotes(BlockchainType.Sei, SEI_NETWORK_ID),
         // await this.updateCodexQuotes(BlockchainType.Celo, CELO_NETWORK_ID),
-        await this.updateCodexQuotes(BlockchainType.Mantle, MANTLE_NETWORK_ID),
-        await this.updateCodexQuotes(BlockchainType.Berachain, BERACHAIN_NETWORK_ID),
+        this.updateCodexQuotes(BlockchainType.Mantle, MANTLE_NETWORK_ID)
+          .then(count => ({ blockchain: 'Mantle', count, success: true }))
+          .catch(err => ({ blockchain: 'Mantle', error: err.message, success: false })),
+        this.updateCodexQuotes(BlockchainType.Berachain, BERACHAIN_NETWORK_ID)
+          .then(count => ({ blockchain: 'Berachain', count, success: true }))
+          .catch(err => ({ blockchain: 'Berachain', error: err.message, success: false })),
       ]);
+      
+      console.log('Quote update results:', JSON.stringify(results));
     } catch (error) {
       console.error('Error updating historic quotes:', error);
+    } finally {
       this.isPolling = false;
+      console.log('[END] pollForUpdates at', new Date().toISOString());
     }
-
-    this.isPolling = false;
-    console.log('Historic quotes updated');
   }
 
   private async updateCoinMarketCapQuotes(): Promise<void> {
@@ -125,12 +134,12 @@ export class HistoricQuoteService implements OnModuleInit {
     console.log('CoinMarketCap quotes updated');
   }
 
-  private async updateCodexQuotes(blockchainType: BlockchainType, networkId: number): Promise<void> {
-    console.log(`[START] updateCodexQuotes for ${blockchainType} with networkId ${networkId}`);
+  private async updateCodexQuotes(blockchainType: BlockchainType, networkId: number): Promise<number> {
+    console.log(`[START] updateCodexQuotes for ${blockchainType} with networkId ${networkId} at ${new Date().toISOString()}`);
     
     try {
       const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);
-      console.log(`Got deployment for ${blockchainType}`);
+      console.log(`Got deployment for ${blockchainType}:`, JSON.stringify(deployment));
       
       const latest = await this.getLatest(blockchainType);
       console.log(`Got latest quotes for ${blockchainType}, found ${Object.keys(latest).length} entries`);
@@ -138,87 +147,128 @@ export class HistoricQuoteService implements OnModuleInit {
       const allAddresses = await this.codexService.getAllTokenAddresses(networkId);
       console.log(`Got ${allAddresses?.length || 0} token addresses from Codex for networkId ${networkId}`);
       
+      if (!allAddresses || allAddresses.length === 0) {
+        console.warn(`No token addresses returned from Codex for networkId ${networkId}`);
+        return 0;
+      }
+      
       // Process in smaller batches to avoid 413 Payload Too Large errors
       const batchSize = 50; // Smaller batch size to avoid payload issues
       const newQuotes = [];
+      let totalProcessed = 0;
+      let totalChanged = 0;
       
       for (let i = 0; i < allAddresses.length; i += batchSize) {
         const addressBatch = allAddresses.slice(i, i + batchSize);
-        console.log(`Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(allAddresses.length/batchSize)}`);
+        console.log(`Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(allAddresses.length/batchSize)} (${addressBatch.length} addresses)`);
         
-        const quotes = await this.codexService.getLatestPrices(deployment, addressBatch);
-        
-        // Log a sample of the quotes data (first 3 entries)
-        const sampleAddresses = Object.keys(quotes || {}).slice(0, 3);
-        console.log(`Sample of quotes data from Codex (first 3 entries):`);
-        for (const addr of sampleAddresses) {
-          console.log(`  - Address: ${addr}, Data:`, JSON.stringify(quotes[addr]));
-        }
-        
-        console.log(`Got quotes from Codex for batch: ${Object.keys(quotes || {}).length} entries`);
-        
-        // Log price changes
-        let unchangedCount = 0;
-        let changedCount = 0;
-        
-        for (const address of Object.keys(quotes || {})) {
-          const quote = quotes[address];
-          if (!quote) {
-            console.warn(`No quote data for address ${address}`);
+        try {
+          const quotes = await this.codexService.getLatestPrices(deployment, addressBatch);
+          console.log(`Got quotes from Codex for batch: ${Object.keys(quotes || {}).length} entries`);
+          
+          if (!quotes || Object.keys(quotes).length === 0) {
+            console.warn(`No quotes returned from Codex for this batch`);
             continue;
           }
           
-          const price = `${quote.usd}`;
-          const existingPrice = latest[address]?.usd;
-
-          if (latest[address] && latest[address].usd === price) {
-            unchangedCount++;
-            continue;
+          // Log a sample of the quotes data (first 3 entries)
+          const sampleAddresses = Object.keys(quotes || {}).slice(0, 3);
+          console.log(`Sample of quotes data from Codex (first 3 entries):`);
+          for (const addr of sampleAddresses) {
+            console.log(`  - Address: ${addr}, Data:`, JSON.stringify(quotes[addr]));
           }
           
-          changedCount++;
-          console.log(`Price change for ${address}: ${existingPrice || 'N/A'} -> ${price}`);
+          // Log price changes
+          let unchangedCount = 0;
+          let changedCount = 0;
+          
+          for (const address of Object.keys(quotes || {})) {
+            totalProcessed++;
+            const quote = quotes[address];
+            if (!quote) {
+              console.warn(`No quote data for address ${address}`);
+              continue;
+            }
+            
+            const price = `${quote.usd}`;
+            const existingPrice = latest[address]?.usd;
 
-          newQuotes.push(
-            this.repository.create({
-              tokenAddress: address,
-              usd: quote.usd,
-              timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
-              provider: 'codex',
-              blockchainType: blockchainType,
-            }),
-          );
-        }
-        
-        console.log(`Price comparison: ${changedCount} changed, ${unchangedCount} unchanged`);
+            if (latest[address] && latest[address].usd === price) {
+              unchangedCount++;
+              continue;
+            }
+            
+            changedCount++;
+            totalChanged++;
+            console.log(`Price change for ${address}: ${existingPrice || 'N/A'} -> ${price}`);
 
-        if (deployment.nativeTokenAlias && addressBatch.includes(deployment.nativeTokenAlias)) {
-          console.log(`Processing native token alias ${deployment.nativeTokenAlias}`);
-          const quote = quotes[deployment.nativeTokenAlias];
-          if (quote) {
-            console.log(`Native token price data:`, JSON.stringify(quote));
             newQuotes.push(
               this.repository.create({
-                tokenAddress: NATIVE_TOKEN.toLowerCase(),
+                tokenAddress: address,
                 usd: quote.usd,
                 timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
                 provider: 'codex',
-                blockchainType: deployment.blockchainType,
+                blockchainType: blockchainType,
               }),
             );
-          } else {
-            console.warn(`No quote found for native token alias ${deployment.nativeTokenAlias}`);
+          }
+          
+          console.log(`Price comparison for batch: ${changedCount} changed, ${unchangedCount} unchanged`);
+        } catch (error) {
+          console.error(`Error processing batch ${Math.floor(i/batchSize) + 1}:`, error);
+        }
+
+        if (deployment.nativeTokenAlias && addressBatch.includes(deployment.nativeTokenAlias)) {
+          console.log(`Processing native token alias ${deployment.nativeTokenAlias}`);
+          try {
+            const quotes = await this.codexService.getLatestPrices(deployment, [deployment.nativeTokenAlias]);
+            const quote = quotes[deployment.nativeTokenAlias];
+            if (quote) {
+              console.log(`Native token price data:`, JSON.stringify(quote));
+              newQuotes.push(
+                this.repository.create({
+                  tokenAddress: NATIVE_TOKEN.toLowerCase(),
+                  usd: quote.usd,
+                  timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
+                  provider: 'codex',
+                  blockchainType: deployment.blockchainType,
+                }),
+              );
+              totalChanged++;
+            } else {
+              console.warn(`No quote found for native token alias ${deployment.nativeTokenAlias}`);
+            }
+          } catch (error) {
+            console.error(`Error processing native token:`, error);
           }
         }
       }
 
-      console.log(`Created ${newQuotes.length} new quote entries to save`);
-      const batches = _.chunk(newQuotes, 100);
-      await Promise.all(batches.map((batch) => this.repository.save(batch)));
-      console.log('Codex quotes updated successfully');
+      console.log(`Created ${newQuotes.length} new quote entries to save (${totalChanged} price changes out of ${totalProcessed} tokens processed)`);
+      
+      if (newQuotes.length > 0) {
+        const batches = _.chunk(newQuotes, 100);
+        let savedCount = 0;
+        for (let i = 0; i < batches.length; i++) {
+          try {
+            const batch = batches[i];
+            await this.repository.save(batch);
+            savedCount += batch.length;
+            console.log(`Saved batch ${i+1}/${batches.length} (${batch.length} quotes)`);
+          } catch (error) {
+            console.error(`Error saving batch ${i+1}:`, error);
+          }
+        }
+        console.log(`Successfully saved ${savedCount}/${newQuotes.length} quotes`);
+      } else {
+        console.log('No new quotes to save');
+      }
+      
+      console.log(`[END] updateCodexQuotes for ${blockchainType} completed at ${new Date().toISOString()}`);
+      return newQuotes.length;
     } catch (error) {
-      console.error(`Error in updateCodexQuotes for ${blockchainType}: ${error.message}`, error);
-      throw error; // Re-throw to ensure the error is properly handled upstream
+      console.error(`[ERROR] updateCodexQuotes for ${blockchainType}: ${error.message}`, error);
+      throw error;
     }
   }
 
@@ -355,23 +405,31 @@ export class HistoricQuoteService implements OnModuleInit {
   }
 
   async getLatest(blockchainType: BlockchainType): Promise<{ [key: string]: HistoricQuote }> {
-    const latestQuotes = await this.repository.query(`
-      SELECT 
-          "tokenAddress",
-          "blockchainType",
-          last(usd, "timestamp") AS usd,
-          last("timestamp", "timestamp") AS timestamp
-      FROM "historic-quotes"
-      WHERE "blockchainType" = '${blockchainType}'
-      GROUP BY "tokenAddress", "blockchainType";
-    `);
+    console.log(`[START] getLatest for ${blockchainType}`);
+    try {
+      const latestQuotes = await this.repository.query(`
+        SELECT 
+            "tokenAddress",
+            "blockchainType",
+            last(usd, "timestamp") AS usd,
+            last("timestamp", "timestamp") AS timestamp
+        FROM "historic-quotes"
+        WHERE "blockchainType" = '${blockchainType}'
+        GROUP BY "tokenAddress", "blockchainType";
+      `);
 
-    const result: { [key: string]: HistoricQuote } = {};
-    latestQuotes.forEach((quote) => {
-      result[quote.tokenAddress] = quote;
-    });
+      console.log(`Retrieved ${latestQuotes.length} latest quotes for ${blockchainType}`);
+      
+      const result: { [key: string]: HistoricQuote } = {};
+      latestQuotes.forEach((quote) => {
+        result[quote.tokenAddress] = quote;
+      });
 
-    return result;
+      return result;
+    } catch (error) {
+      console.error(`[ERROR] getLatest for ${blockchainType}:`, error);
+      throw error;
+    }
   }
 
   async getHistoryQuotes(addresses: string[], start: number, end: number): Promise<{ [key: string]: HistoricQuote[] }> {

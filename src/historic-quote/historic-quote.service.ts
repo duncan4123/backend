@@ -137,48 +137,55 @@ export class HistoricQuoteService implements OnModuleInit {
     const addresses = await this.codexService.getAllTokenAddresses(networkId);
     console.log(`Got ${addresses?.length || 0} token addresses from Codex for networkId ${networkId}`);
     
-    const quotes = await this.codexService.getLatestPrices(deployment, addresses);
-    console.log(`Got quotes from Codex: ${Object.keys(quotes || {}).length} entries`);
-    
+    // Process in smaller batches to avoid 413 Payload Too Large errors
+    const batchSize = 50; // Smaller batch size to avoid payload issues
     const newQuotes = [];
-
-    for (const address of Object.keys(quotes || {})) {
-      const quote = quotes[address];
-      if (!quote) {
-        console.warn(`No quote data for address ${address}`);
-        continue;
-      }
+    
+    for (let i = 0; i < addresses.length; i += batchSize) {
+      const addressBatch = addresses.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(addresses.length/batchSize)}`);
       
-      const price = `${quote.usd}`;
+      const quotes = await this.codexService.getLatestPrices(deployment, addressBatch);
+      console.log(`Got quotes from Codex for batch: ${Object.keys(quotes || {}).length} entries`);
+      
+      for (const address of Object.keys(quotes || {})) {
+        const quote = quotes[address];
+        if (!quote) {
+          console.warn(`No quote data for address ${address}`);
+          continue;
+        }
+        
+        const price = `${quote.usd}`;
 
-      if (latest[address] && latest[address].usd === price) continue;
+        if (latest[address] && latest[address].usd === price) continue;
 
-      newQuotes.push(
-        this.repository.create({
-          tokenAddress: address,
-          usd: quote.usd,
-          timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
-          provider: 'codex',
-          blockchainType: blockchainType,
-        }),
-      );
-    }
-
-    if (deployment.nativeTokenAlias) {
-      console.log(`Processing native token alias ${deployment.nativeTokenAlias}`);
-      const quote = quotes[deployment.nativeTokenAlias];
-      if (quote) {
         newQuotes.push(
           this.repository.create({
-            tokenAddress: NATIVE_TOKEN.toLowerCase(),
+            tokenAddress: address,
             usd: quote.usd,
             timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
             provider: 'codex',
-            blockchainType: deployment.blockchainType,
+            blockchainType: blockchainType,
           }),
         );
-      } else {
-        console.warn(`No quote found for native token alias ${deployment.nativeTokenAlias}`);
+      }
+
+      if (deployment.nativeTokenAlias && addressBatch.includes(deployment.nativeTokenAlias)) {
+        console.log(`Processing native token alias ${deployment.nativeTokenAlias}`);
+        const quote = quotes[deployment.nativeTokenAlias];
+        if (quote) {
+          newQuotes.push(
+            this.repository.create({
+              tokenAddress: NATIVE_TOKEN.toLowerCase(),
+              usd: quote.usd,
+              timestamp: moment.unix(quote.last_updated_at).utc().toISOString(),
+              provider: 'codex',
+              blockchainType: deployment.blockchainType,
+            }),
+          );
+        } else {
+          console.warn(`No quote found for native token alias ${deployment.nativeTokenAlias}`);
+        }
       }
     }
 

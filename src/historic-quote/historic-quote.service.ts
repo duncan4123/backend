@@ -77,7 +77,7 @@ export class HistoricQuoteService implements OnModuleInit {
     if (shouldSeedOnStartup) {
       console.log('Starting to seed Codex data...');
       // Seed for specific blockchain types
-      await this.seedCodex(BlockchainType.Berachain);
+      await this.seedCodex(BlockchainType.Iota);
       // Add more blockchain types as needed
       console.log('Codex data seeding completed');
     }

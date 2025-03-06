@@ -24,6 +24,11 @@ RUN npm install --omit=dev
 # Copy the rest of the application code
 COPY . .
 
+# Install Python dependencies for the simulator
+RUN if [ -f src/simulator/requirements.txt ]; then \
+        pip install --no-cache-dir -r src/simulator/requirements.txt; \
+    fi
+
 # Build the application
 RUN npm run build
 

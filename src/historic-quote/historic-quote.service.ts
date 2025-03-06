@@ -69,7 +69,7 @@ export class HistoricQuoteService implements OnModuleInit {
     }
     
     // Uncomment to run seeding on startup
-    this.seedOnStartup();
+    // this.seedOnStartup();
   }
 
   private async seedOnStartup() {
@@ -77,7 +77,7 @@ export class HistoricQuoteService implements OnModuleInit {
     if (shouldSeedOnStartup) {
       console.log('Starting to seed Codex data...');
       // Seed for specific blockchain types
-      await this.seedCodex(BlockchainType.Iota);
+      await this.seedCodex(BlockchainType.Mantle); // ToDo add sonic
       // Add more blockchain types as needed
       console.log('Codex data seeding completed');
     }

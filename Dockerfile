@@ -25,8 +25,8 @@ RUN npm install --omit=dev
 COPY . .
 
 # Install Python dependencies for the simulator
-RUN if [ -f src/simulator/requirements.txt ]; then \
-        pip install --no-cache-dir -r src/simulator/requirements.txt; \
+RUN if [ -f src/simulator/requirements ]; then \
+        pip install --no-cache-dir -r src/simulator/requirements; \
     fi
 
 # Build the application

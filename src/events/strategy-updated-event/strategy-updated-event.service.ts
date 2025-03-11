@@ -2,7 +2,7 @@ import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Injectable } from '@nestjs/common';
 import { StrategyUpdatedEvent } from './strategy-updated-event.entity';
-import { CustomFnArgs, HarvesterService } from '../../harvester/harvester.service';
+import { ContractsNames, CustomFnArgs, HarvesterService } from '../../harvester/harvester.service';
 import { PairsDictionary } from '../../pair/pair.service';
 import { TokensByAddress } from '../../token/token.service';
 import { BigNumber } from '@ethersproject/bignumber';
@@ -35,7 +35,7 @@ export class StrategyUpdatedEventService {
   ): Promise<any> {
     return this.harvesterService.processEvents({
       entity: 'strategy-updated-events',
-      contractName: 'CarbonController',
+      contractName: ContractsNames.CarbonController,
       eventName: 'StrategyUpdated',
       endBlock,
       repository: this.repository,
@@ -55,7 +55,7 @@ export class StrategyUpdatedEventService {
       .leftJoinAndSelect('strategyUpdatedEvents.pair', 'pair')
       .leftJoinAndSelect('strategyUpdatedEvents.token0', 'token0')
       .leftJoinAndSelect('strategyUpdatedEvents.token1', 'token1')
-      .where('block.id > :startBlock', { startBlock })
+      .where('block.id >= :startBlock', { startBlock })
       .andWhere('block.id <= :endBlock', { endBlock })
       .andWhere('strategyUpdatedEvents.blockchainType = :blockchainType', { blockchainType: deployment.blockchainType })
       .andWhere('strategyUpdatedEvents.exchangeId = :exchangeId', { exchangeId: deployment.exchangeId })

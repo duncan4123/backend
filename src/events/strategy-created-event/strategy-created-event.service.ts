@@ -2,7 +2,7 @@ import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Injectable } from '@nestjs/common';
 import { StrategyCreatedEvent } from './strategy-created-event.entity';
-import { CustomFnArgs, HarvesterService } from '../../harvester/harvester.service';
+import { ContractsNames, CustomFnArgs, HarvesterService } from '../../harvester/harvester.service';
 import { PairsDictionary } from '../../pair/pair.service';
 import { TokensByAddress } from '../../token/token.service';
 import { BigNumber } from '@ethersproject/bignumber';
@@ -24,7 +24,7 @@ export class StrategyCreatedEventService {
   ): Promise<any> {
     return this.harvesterService.processEvents({
       entity: 'strategy-created-events',
-      contractName: 'CarbonController',
+      contractName: ContractsNames.CarbonController,
       eventName: 'StrategyCreated',
       endBlock,
       repository: this.repository,
@@ -56,12 +56,23 @@ export class StrategyCreatedEventService {
       .leftJoinAndSelect('strategyCreatedEvents.pair', 'pair')
       .leftJoinAndSelect('strategyCreatedEvents.token0', 'token0')
       .leftJoinAndSelect('strategyCreatedEvents.token1', 'token1')
-      .where('block.id > :startBlock', { startBlock })
+      .where('block.id >= :startBlock', { startBlock })
       .andWhere('block.id <= :endBlock', { endBlock })
       .andWhere('strategyCreatedEvents.blockchainType = :blockchainType', { blockchainType: deployment.blockchainType })
       .andWhere('strategyCreatedEvents.exchangeId = :exchangeId', { exchangeId: deployment.exchangeId })
       .orderBy('block.id', 'ASC')
       .getMany();
+  }
+
+  async getOne(id: string) {
+    return this.repository
+      .createQueryBuilder('strategyCreatedEvents')
+      .leftJoinAndSelect('strategyCreatedEvents.block', 'block')
+      .leftJoinAndSelect('strategyCreatedEvents.pair', 'pair')
+      .leftJoinAndSelect('strategyCreatedEvents.token0', 'token0')
+      .leftJoinAndSelect('strategyCreatedEvents.token1', 'token1')
+      .where('strategyCreatedEvents.id = :id', { id })
+      .getOne();
   }
 
   async parseEvent(args: CustomFnArgs): Promise<any> {

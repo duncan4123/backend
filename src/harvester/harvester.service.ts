@@ -7,6 +7,11 @@ import { PairsDictionary } from '../pair/pair.service';
 import { BlockService, BlocksDictionary } from '../block/block.service';
 import { Quote } from '../quote/quote.entity';
 import { ERC20 } from '../abis/erc20.abi';
+import { CarbonController } from '../abis/CarbonController.abi';
+import { CarbonPOL } from '../abis/CarbonPOL.abi';
+import { CarbonVortex } from '../abis/CarbonVortex.abi';
+import { CarbonVoucher } from '../abis/CarbonVoucher.abi';
+import { BancorArbitrage } from '../abis/BancorArbitrage.abi';
 import moment from 'moment';
 import { MulticallAbiEthereum } from '../abis/multicall.abi';
 import { multicallAbiSei } from '../abis/multicall.abi';
@@ -15,9 +20,30 @@ import { TokensByAddress } from '../token/token.service';
 import { BigNumber } from '@ethersproject/bignumber';
 import { BlockchainType, Deployment } from '../deployment/deployment.service';
 import { ConfigService } from '@nestjs/config';
-
+import { sleep } from '../utilities';
+import { LiquidityProtectionStore } from '../abis/LiquidityProtectionStore.abi';
 export const VERSIONS = {
   // PoolMigrator: [{ terminatesAt: 14830503, version: 1 }, { version: 2 }],
+};
+
+export enum ContractsNames {
+  ERC20 = 'ERC20',
+  CarbonController = 'CarbonController',
+  CarbonPOL = 'CarbonPOL',
+  CarbonVortex = 'CarbonVortex',
+  CarbonVoucher = 'CarbonVoucher',
+  BancorArbitrage = 'BancorArbitrage',
+  LiquidityProtectionStore = 'LiquidityProtectionStore',
+}
+
+const Contracts = {
+  [ContractsNames.ERC20]: ERC20,
+  [ContractsNames.CarbonController]: CarbonController,
+  [ContractsNames.CarbonPOL]: CarbonPOL,
+  [ContractsNames.CarbonVortex]: CarbonVortex,
+  [ContractsNames.CarbonVoucher]: CarbonVoucher,
+  [ContractsNames.BancorArbitrage]: BancorArbitrage,
+  [ContractsNames.LiquidityProtectionStore]: LiquidityProtectionStore,
 };
 
 export interface ConstantField {
@@ -32,7 +58,7 @@ interface SourceMapItem {
 export interface ProcessEventsArgs {
   entity: string;
   contractAddress?: string;
-  contractName?: string;
+  contractName?: ContractsNames;
   eventName: string;
   endBlock: number;
   repository: Repository<unknown>;
@@ -103,7 +129,7 @@ export class HarvesterService {
   ) {}
 
   async fetchEventsFromBlockchain(
-    contractName: string,
+    contractName: ContractsNames,
     eventName: string,
     fromBlock: number,
     toBlock: number,
@@ -159,39 +185,21 @@ export class HarvesterService {
     return events;
   }
 
-  getContract(contractName: string, version?: number, address?: string, deployment?: Deployment): any {
-    const web3 = new Web3(deployment.rpcEndpoint); // Use rpcEndpoint from deployment
-    let contract;
-    if (contractName === ContractNames.ERC20) {
-      contract = new web3.eth.Contract(ERC20, address);
-    } else {
-      const contractsEnv = deployment.exchangeId;
-      let path = `../contracts/${contractsEnv}/${contractName}`;
-      if (version) path += `V${version}`;
-      path += '.json';
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const contractJson = require(path);
+  getContract(contractName: ContractsNames, version?: number, address?: string, deployment?: Deployment): any {
+    const web3 = new Web3(deployment.rpcEndpoint);
 
-      let _address;
-      if (address) {
-        _address = address;
-      } else {
-        let configName = camelToSnakeCase(contractName).toUpperCase();
-        if (configName[0] === '_') configName = configName.substring(1);
-        const configValue = process.env[configName];
-        if (configValue) {
-          _address = configValue;
-        } else {
-          _address = contractJson.address;
-        }
-      }
-      contract = new web3.eth.Contract(contractJson.abi, _address);
+    // Determine contract address
+    const contractAddress = address || deployment?.contracts[contractName]?.address;
+    if (!contractAddress) {
+      throw new Error(`Contract ${contractName} address not found in deployment configuration`);
     }
-    return contract;
+
+    // Create and return contract instance
+    return new web3.eth.Contract(Contracts[contractName], contractAddress);
   }
 
   async processEvents(args: ProcessEventsArgs): Promise<any[]> {
-    const { deployment } = args; // Extract deployment from args
+    const { deployment } = args;
     const key = `${deployment.blockchainType}-${deployment.exchangeId}-${args.entity}`;
     const lastProcessedBlock = await this.lastProcessedBlockService.getOrInit(key, deployment.startBlock);
     const result = [];
@@ -199,6 +207,9 @@ export class HarvesterService {
     if (args.skipPreClearing !== true) {
       await this.preClear(args.repository, lastProcessedBlock, deployment);
     }
+
+    const limit = (await import('p-limit')).default;
+    const concurrencyLimit = limit(deployment.harvestConcurrency);
 
     for (
       let rangeStart = lastProcessedBlock + 1;
@@ -217,7 +228,7 @@ export class HarvesterService {
         rangeEnd,
         args.contractAddress,
         deployment,
-      ); // Pass deployment
+      );
 
       if (events.length > 0) {
         let blocksDictionary: BlocksDictionary;
@@ -229,16 +240,13 @@ export class HarvesterService {
 
         const newEvents = await Promise.all(
           events.map(async (e) => {
-            if (e.transactionHash === '0x4274ad534b26c72588faae1331dac752e7f4facf0fff9333a4b9964b751331a1') {
-              console.log(rangeStart, rangeEnd);
-            }
             let newEvent = args.repository.create({
               block: { id: Number(e.blockNumber) },
               transactionIndex: Number(e.transactionIndex),
               transactionHash: e.transactionHash,
               logIndex: Number(e.logIndex),
-              blockchainType: deployment.blockchainType, // Include blockchainType
-              exchangeId: deployment.exchangeId, // Include exchangeId
+              blockchainType: deployment.blockchainType,
+              exchangeId: deployment.exchangeId,
             });
 
             if (args.constants) {
@@ -296,9 +304,13 @@ export class HarvesterService {
             }
 
             if (args.fetchCallerId) {
-              const web3 = new Web3(deployment.rpcEndpoint);
-              const transaction = await web3.eth.getTransaction(e.transactionHash);
-              newEvent['callerId'] = transaction.from;
+              await concurrencyLimit(async () => {
+                const web3 = new Web3(deployment.rpcEndpoint);
+                const transaction = await web3.eth.getTransaction(e.transactionHash);
+                newEvent['callerId'] = transaction.from;
+
+                await sleep(deployment.harvestSleep || 0);
+              });
             }
 
             if (args.customFns) {

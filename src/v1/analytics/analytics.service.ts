@@ -76,13 +76,13 @@ WITH filtered_strategies AS (
 ), strategies_with_decimals AS (
     SELECT fs.liquidity0, ts0.decimals AS decimals0, fs."token0Id", fs.liquidity1, ts1.decimals AS decimals1, fs."token1Id" 
     FROM filtered_strategies fs 
-    LEFT JOIN tokens ts0 ON fs."token0Id" = ts0.id 
-    LEFT JOIN tokens ts1 ON fs."token1Id" = ts1.id
+    LEFT JOIN tokens ts0 ON fs."token0Id" = ts0.id AND ts0."blockchainType" = '${deployment.blockchainType}' AND ts0."exchangeId" = '${deployment.exchangeId}'
+    LEFT JOIN tokens ts1 ON fs."token1Id" = ts1.id AND ts1."blockchainType" = '${deployment.blockchainType}' AND ts1."exchangeId" = '${deployment.exchangeId}'
 ), strategies_with_prices AS (
     SELECT swd.liquidity0::NUMERIC, decimals0::NUMERIC, swd."token0Id", q1.usd::NUMERIC AS price0, swd.liquidity1::NUMERIC, decimals1::NUMERIC, swd."token1Id", q2.usd::NUMERIC AS price1 
     FROM strategies_with_decimals swd 
-    LEFT JOIN quotes q1 ON swd."token0Id" = q1."tokenId" 
-    LEFT JOIN quotes q2 ON swd."token1Id" = q2."tokenId"
+    LEFT JOIN quotes q1 ON swd."token0Id" = q1."tokenId" AND q1."blockchainType" = '${deployment.blockchainType}'
+    LEFT JOIN quotes q2 ON swd."token1Id" = q2."tokenId" AND q2."blockchainType" = '${deployment.blockchainType}'
 ), strategies_with_liquidity AS (
     SELECT (liquidity0 / POW(10, decimals0) * price0) AS liquidity 
     FROM strategies_with_prices 
@@ -108,9 +108,9 @@ WITH filtered_strategies AS (
     SELECT COUNT(DISTINCT "pairId") AS active_pairs 
     FROM filtered_strategies
 ), number_trades AS (
-    SELECT COUNT("id") AS number_trades 
-    FROM "tokens-traded-events"
-    WHERE "blockchainType" = '${deployment.blockchainType}' AND "exchangeId" = '${deployment.exchangeId}'    
+    SELECT COUNT(*) AS number_trades 
+    FROM "strategy-updated-events"
+    WHERE "blockchainType" = '${deployment.blockchainType}' AND "exchangeId" = '${deployment.exchangeId}' AND "reason" = 1
 ), latest_updated_block AS (
     SELECT MIN("last_processed_block"."block") AS last_block, MIN("updatedAt") AS last_timestamp 
     FROM last_processed_block
@@ -118,8 +118,8 @@ WITH filtered_strategies AS (
 ), tokens_traded_with_token_info AS (
     SELECT tte."timestamp" AS timestamp, tte."transactionHash" AS transactionHash, tte."blockId" AS blockId, tte."trader" AS trader, tte."byTargetAmount" AS byTargetAmount, tte."sourceTokenId" AS sourceTokenId, tte."targetTokenId" AS targetTokenId, tte."sourceAmount" AS sourceAmount, tte."targetAmount" AS targetAmount, tte."tradingFeeAmount" AS tradingFeeAmount, ts."address" AS sourceAddress, ts."symbol" AS sourceSymbol, ts."decimals" AS sourceDecimals, tt."address" AS targetAddress, tt."symbol" AS targetSymbol, tt."decimals" AS targetDecimals 
     FROM "tokens-traded-events" tte 
-    JOIN tokens ts ON tte."sourceTokenId" = ts."id" 
-    JOIN tokens tt ON tte."targetTokenId" = tt."id"
+    JOIN tokens ts ON tte."sourceTokenId" = ts."id" AND ts."blockchainType" = '${deployment.blockchainType}' AND ts."exchangeId" = '${deployment.exchangeId}'
+    JOIN tokens tt ON tte."targetTokenId" = tt."id" AND tt."blockchainType" = '${deployment.blockchainType}' AND tt."exchangeId" = '${deployment.exchangeId}'
     WHERE tte."blockchainType" = '${deployment.blockchainType}' AND tte."exchangeId" = '${deployment.exchangeId}'
 
 ), correct_fee_units AS (
@@ -159,11 +159,14 @@ FROM sum_liquidity sl, strategies_created sc, pairs_created pc, unique_traders u
 
   private async getTradesCount(deployment: Deployment): Promise<any> {
     const query = `
-      SELECT "strategyId" as id, count(*) as trade_count
+      SELECT 
+        "strategyId" AS id, 
+        COUNT(*) AS trade_count
       FROM "strategy-updated-events" s
-      where reason = 1
-      AND "blockchainType" = '${deployment.blockchainType}' AND "exchangeId" = '${deployment.exchangeId}'
-      group by "strategyId"
+      WHERE "blockchainType" = '${deployment.blockchainType}'
+      AND "exchangeId" = '${deployment.exchangeId}'
+      AND reason = 1
+      GROUP BY "strategyId"
     `;
 
     const result = await this.strategy.query(query);

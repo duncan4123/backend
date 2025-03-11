@@ -2,7 +2,7 @@ import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Injectable } from '@nestjs/common';
 import { TradingFeePpmUpdatedEvent } from './trading-fee-ppm-updated-event.entity';
-import { HarvesterService } from '../../harvester/harvester.service';
+import { ContractsNames, HarvesterService } from '../../harvester/harvester.service';
 import { Deployment } from '../../deployment/deployment.service';
 
 @Injectable()
@@ -31,7 +31,7 @@ export class TradingFeePpmUpdatedEventService {
   async update(endBlock: number, deployment: Deployment): Promise<any> {
     return this.harvesterService.processEvents({
       entity: 'trading-fee-ppm-updated-events',
-      contractName: 'CarbonController',
+      contractName: ContractsNames.CarbonController,
       eventName: 'TradingFeePPMUpdated',
       endBlock,
       repository: this.repository,
@@ -48,7 +48,7 @@ export class TradingFeePpmUpdatedEventService {
       .leftJoinAndSelect('tradingFeePpmUpdatedEvents.pair', 'pair')
       .leftJoinAndSelect('pair.token0', 'token0')
       .leftJoinAndSelect('pair.token1', 'token1')
-      .where('block.id > :startBlock', { startBlock })
+      .where('block.id >= :startBlock', { startBlock })
       .andWhere('block.id <= :endBlock', { endBlock })
       .andWhere('tradingFeePpmUpdatedEvents.blockchainType = :blockchainType', {
         blockchainType: deployment.blockchainType,

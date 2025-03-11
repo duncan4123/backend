@@ -7,7 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
-    "postbuild": "copyfiles --error --up 1 \"src/contracts/**/*\" \"dist\"; copyfiles --error --up 1 \"src/simulator/**/*\" \"dist\"",
+    "postbuild": "copyfiles --error --up 1 \"src/simulator/**/*\" \"dist\"",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "TZ=UTC nest start --watch --debug",
     "start:dev": "TZ=UTC nest start --watch",
@@ -20,18 +20,19 @@
     "test:debug": "TZ=UTC node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand --watch",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "gcloud:build:production": "CLOUDSDK_CORE_PROJECT=bancor-api gcloud builds submit --tag europe-west2-docker.pkg.dev/bancor-api/carbon-multi/carbon-multi --timeout 3600",
-    "compile-abis": "typechain --target ethers-v5 --out-dir \"src/abis/types\" \"src/abis/*.json\"",
     "migration:create": "read -p 'Enter migration name: ' NAME && if [ -z \"$NAME\" ]; then echo 'Error: Migration name is required!' && exit 1; else typeorm-ts-node-commonjs migration:create src/migrations/$NAME; fi",
     "migration:generate": "npm run build && read -p 'Enter migration name: ' NAME && if [ -z \"$NAME\" ]; then echo 'Error: Migration name is required!' && exit 1; else typeorm-ts-node-commonjs migration:generate src/migrations/$NAME -d src/typeorm.config.ts; fi",
     "migration:run": "npm run build && typeorm-ts-node-commonjs migration:run -d src/typeorm.config.ts",
     "migration:revert": "npm run build && typeorm-ts-node-commonjs migration:revert -d src/typeorm.config.ts",
     "generate-erd": "ts-node -r tsconfig-paths/register --compilerOptions '{\"module\":\"CommonJS\"}' src/scripts/generate-erd.ts && npm run generate-erd-svg",
-    "generate-erd-svg": "mmdc -i erd.mmd -o erd.svg"
+    "generate-erd-svg": "mmdc -i erd.mmd -o erd.svg",
+    "db:seed": "node src/scripts/seed.js"
   },
   "dependencies": {
     "@codex-data/sdk": "^0.6.2",
     "@ethersproject/bignumber": "^5.7.0",
     "@google-cloud/secret-manager": "^5.3.0",
+    "@google-cloud/tasks": "^5.5.1",
     "@nestjs/axios": "^3.0.0",
     "@nestjs/cache-manager": "^2.1.0",
     "@nestjs/cli": "^10.0.0",
@@ -57,6 +58,7 @@
     "pg": "^8.11.1",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
+    "telegraf": "^4.16.3",
     "typeorm": "^0.3.17",
     "web3": "^4.0.2"
   },
@@ -72,6 +74,7 @@
     "@types/supertest": "^2.0.12",
     "@typescript-eslint/eslint-plugin": "^5.59.11",
     "@typescript-eslint/parser": "^5.59.11",
+    "cli-progress": "^3.12.0",
     "eslint": "^8.42.0",
     "eslint-config-prettier": "^8.8.0",
     "eslint-plugin-prettier": "^4.2.1",

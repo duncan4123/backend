@@ -101,6 +101,8 @@ export class QuoteService implements OnModuleInit {
         newPrices = await this.coingeckoService.getLatestPrices(addresses, deployment);
         const gasTokenPrice = await this.coingeckoService.getLatestGasTokenPrice(deployment);
         newPrices = { ...newPrices, ...gasTokenPrice };
+      } else {
+        newPrices = await this.codexService.getLatestPrices(deployment, addresses);
       }
 
       await this.updateQuotes(tokens, newPrices, deployment);
@@ -119,6 +121,24 @@ export class QuoteService implements OnModuleInit {
     const all = await this.quoteRepository.find({ where: { blockchainType: deployment.blockchainType } });
     const tokensByAddress = {};
     all.forEach((q) => (tokensByAddress[q.token.address] = q));
+    return tokensByAddress;
+  }
+
+  /**
+   * Find quotes for a given blockchain type and token addresses
+   * @param blockchainType chain type
+   * @param addresses addresses to find quotes for
+   * @returns quotes by address
+   */
+  async findQuotes(blockchainType: BlockchainType, addresses: string[]): Promise<QuotesByAddress> {
+    const result = await this.quoteRepository
+      .createQueryBuilder('quote')
+      .leftJoinAndSelect('quote.token', 'token')
+      .where('quote.blockchainType = :blockchainType', { blockchainType })
+      .andWhere('LOWER(token.address) IN (:...addresses)', { addresses: addresses.map((a) => a.toLowerCase()) })
+      .getMany();
+    const tokensByAddress = {};
+    result.forEach((q) => (tokensByAddress[q.token.address] = q));
     return tokensByAddress;
   }
 
@@ -160,9 +180,9 @@ export class QuoteService implements OnModuleInit {
       try {
         data = await this.fetchPriceFromProvider(provider.name, deployment, address, currencies);
 
-        const hasValidPriceData = Object.keys(data[addressLower]).some(
-          (key) => key !== 'provider' && key !== 'last_updated_at',
-        );
+        const hasValidPriceData = data[addressLower]
+          ? Object.keys(data[addressLower]).some((key) => key !== 'provider' && key !== 'last_updated_at')
+          : false;
 
         if (data && Object.keys(data).length > 0 && data[addressLower] && hasValidPriceData) {
           usedProvider = provider.name;
@@ -211,11 +231,31 @@ export class QuoteService implements OnModuleInit {
 
   private async shouldSkipProvider(blockchainType: string, address: string, provider: string): Promise<boolean> {
     const key = `skip:${blockchainType}:${address}:${provider}`;
-    return (await this.redis.get(key)) === '1';
+    return (await this.redis.client.get(key)) === '1';
   }
 
   private async setProviderSkipFlag(blockchainType: string, address: string, provider: string): Promise<void> {
     const key = `skip:${blockchainType}:${address}:${provider}`;
-    await this.redis.setex(key, this.SKIP_TIMEOUT, '1');
+    await this.redis.client.setex(key, this.SKIP_TIMEOUT, '1');
+  }
+
+  /**
+   * Get recent quotes for a given blockchain type and token address
+   * Returns a quote if it exists and was updated in the last 5 minutes
+   * @param blockchainType chain type
+   * @param address address to find quotes for
+   * @returns quote
+   */
+  async getRecentQuotesForAddress(blockchainType: BlockchainType, address: string): Promise<Quote | undefined> {
+    const existingQuotes = await this.findQuotes(blockchainType, [address]);
+    const existingQuote = existingQuotes[address] || existingQuotes[address.toLowerCase()];
+    if (existingQuote) {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      if (new Date(existingQuote.timestamp) > fiveMinutesAgo) {
+        return existingQuote;
+      }
+    }
+
+    return undefined;
   }
 }

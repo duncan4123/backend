@@ -2,7 +2,7 @@ import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Injectable } from '@nestjs/common';
 import { VoucherTransferEvent } from './voucher-transfer-event.entity';
-import { CustomFnArgs, HarvesterService } from '../../harvester/harvester.service';
+import { ContractsNames, CustomFnArgs, HarvesterService } from '../../harvester/harvester.service';
 import { BigNumber } from '@ethersproject/bignumber';
 import { Deployment } from '../../deployment/deployment.service';
 
@@ -18,7 +18,6 @@ export class VoucherTransferEventService {
     return this.repository
       .createQueryBuilder('v')
       .leftJoinAndSelect('v.block', 'block')
-      .leftJoinAndSelect('v.strategy', 'strategy')
       .where('v.blockchainType = :blockchainType', { blockchainType: deployment.blockchainType })
       .andWhere('v.exchangeId = :exchangeId', { exchangeId: deployment.exchangeId })
       .orderBy('block.id', 'ASC')
@@ -28,7 +27,7 @@ export class VoucherTransferEventService {
   async update(endBlock: number, deployment: Deployment): Promise<any> {
     return this.harvesterService.processEvents({
       entity: 'voucher-transfer-events',
-      contractName: 'Voucher',
+      contractName: ContractsNames.CarbonVoucher,
       eventName: 'Transfer',
       endBlock,
       repository: this.repository,
@@ -43,8 +42,7 @@ export class VoucherTransferEventService {
     return this.repository
       .createQueryBuilder('v')
       .leftJoinAndSelect('v.block', 'block')
-      .leftJoinAndSelect('v.strategy', 'strategy')
-      .where('block.id > :startBlock', { startBlock })
+      .where('block.id >= :startBlock', { startBlock })
       .andWhere('block.id <= :endBlock', { endBlock })
       .andWhere('v.blockchainType = :blockchainType', { blockchainType: deployment.blockchainType })
       .andWhere('v.exchangeId = :exchangeId', { exchangeId: deployment.exchangeId })

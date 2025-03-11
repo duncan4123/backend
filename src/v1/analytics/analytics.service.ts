@@ -202,7 +202,7 @@ FROM sum_liquidity sl, strategies_created sc, pairs_created pc, unique_traders u
   }
 
   private async getTrending(deployment: Deployment): Promise<any> {
-    const totalTradeCountQuery = this.strategy.query<TradeCount[]>(`
+    const totalTradeCountQuery = this.strategy.query(`
       SELECT 
           COUNT(*)::INT AS trade_count
       FROM "strategy-updated-events"
@@ -211,7 +211,7 @@ FROM sum_liquidity sl, strategies_created sc, pairs_created pc, unique_traders u
       AND "reason" = 1
     `);
 
-    const tradeCountQuery = this.strategy.query<StrategyTrade[]>(`
+    const tradeCountQuery = this.strategy.query(`
       WITH strategy_trade_24hcounts AS (
           SELECT 
               s."blockchainType" AS "blockchainType", 
@@ -267,7 +267,7 @@ FROM sum_liquidity sl, strategies_created sc, pairs_created pc, unique_traders u
       ORDER BY 2 DESC; 
     `);
 
-    const pairCountQuery = this.strategy.query<PairTrade[]>(`
+    const pairCountQuery = this.strategy.query(`
       WITH pair_trade_24hcounts AS (
           SELECT 
               s."blockchainType" AS "blockchainType", 

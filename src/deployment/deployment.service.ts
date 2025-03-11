@@ -88,6 +88,7 @@ export class DeploymentService {
           symbol: 'IOTA',
           address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
         },
+        nativeTokenAlias: '0x6e47f8d48a01b44df3fff35d258a10a3aedc114c',
         contracts: {
           CarbonController: {
             address: '0xC537e898CD774e2dCBa3B14Ea6f34C93d5eA45e1',
@@ -138,7 +139,7 @@ export class DeploymentService {
           symbol: 'MNT',
           address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
         },
-        nativeTokenAlias: '0xe30fedd158a2e3b13e9badaeabafc5516e95e8c7',
+        nativeTokenAlias: '0x78c1b0c915c4faa5fffa6cabf0219da63d7f4cb8',
         contracts: {
           CarbonController: {
             address: '0xe4816658ad10bF215053C533cceAe3f59e1f1087',
@@ -180,6 +181,7 @@ export class DeploymentService {
           symbol: 'BERA',
           address: NATIVE_TOKEN,
         },
+        nativeTokenAlias: '0x6969696969696969696969696969696969696969',
         contracts: {
           CarbonController: {
             address: '0x10Fa549E70Ede76C258c0808b289e4Ac3c9ab2e2',

@@ -11,6 +11,34 @@ const ANALYTICS_GENERIC_METRICS_KEY = 'carbon:generic-metrics';
 const ANALYTICS_TRADES_COUNT_KEY = 'carbon:trades-count';
 const ANALYTICS_TRENDING = 'carbon:trending';
 
+interface TradeCount {
+  trade_count: number;
+}
+
+interface StrategyTrade {
+  id: string;
+  strategy_trades: number;
+  strategy_trades_24h: number;
+  token0: string;
+  token1: string;
+  symbol0: string;
+  symbol1: string;
+  pair_symbol: string;
+  pair_addresses: string;
+}
+
+interface PairTrade {
+  pair_id: string;
+  pair_trades: number;
+  pair_trades_24h: number;
+  token0: string;
+  token1: string;
+  symbol0: string;
+  symbol1: string;
+  pair_symbol: string;
+  pair_addresses: string;
+}
+
 @Injectable()
 export class AnalyticsService {
   constructor(
@@ -174,7 +202,7 @@ FROM sum_liquidity sl, strategies_created sc, pairs_created pc, unique_traders u
   }
 
   private async getTrending(deployment: Deployment): Promise<any> {
-    const totalTradeCountQuery = this.strategy.query(`
+    const totalTradeCountQuery = this.strategy.query<TradeCount[]>(`
       SELECT 
           COUNT(*)::INT AS trade_count
       FROM "strategy-updated-events"
@@ -183,7 +211,7 @@ FROM sum_liquidity sl, strategies_created sc, pairs_created pc, unique_traders u
       AND "reason" = 1
     `);
 
-    const tradeCountQuery = this.strategy.query(`
+    const tradeCountQuery = this.strategy.query<StrategyTrade[]>(`
       WITH strategy_trade_24hcounts AS (
           SELECT 
               s."blockchainType" AS "blockchainType", 
@@ -239,7 +267,7 @@ FROM sum_liquidity sl, strategies_created sc, pairs_created pc, unique_traders u
       ORDER BY 2 DESC; 
     `);
 
-    const pairCountQuery = this.strategy.query(`
+    const pairCountQuery = this.strategy.query<PairTrade[]>(`
       WITH pair_trade_24hcounts AS (
           SELECT 
               s."blockchainType" AS "blockchainType", 
@@ -295,12 +323,16 @@ FROM sum_liquidity sl, strategies_created sc, pairs_created pc, unique_traders u
       ORDER BY p.pair_trades DESC;
     `);
 
-    const [totalTradeCount, tradeCount, pairCount] = await Promise.all([
+    const [totalTradeCountResult, tradeCountResult, pairCountResult] = await Promise.all([
       totalTradeCountQuery,
       tradeCountQuery,
       pairCountQuery,
     ]);
 
-    return convertKeysToCamelCase({ totalTradeCount: totalTradeCount[0].trade_count, tradeCount, pairCount });
+    return convertKeysToCamelCase({
+      totalTradeCount: totalTradeCountResult[0]?.trade_count || 0,
+      tradeCount: tradeCountResult || [],
+      pairCount: pairCountResult || []
+    });
   }
 }

@@ -101,8 +101,6 @@ export class QuoteService implements OnModuleInit {
         newPrices = await this.coingeckoService.getLatestPrices(addresses, deployment);
         const gasTokenPrice = await this.coingeckoService.getLatestGasTokenPrice(deployment);
         newPrices = { ...newPrices, ...gasTokenPrice };
-      } else {
-        newPrices = await this.codexService.getLatestPrices(deployment, addresses);
       }
 
       await this.updateQuotes(tokens, newPrices, deployment);

@@ -171,14 +171,28 @@ export class DeploymentService {
         exchangeId: ExchangeId.OGBerachain,
         blockchainType: BlockchainType.Berachain,
         rpcEndpoint: this.configService.get('BERACHAIN_RPC_ENDPOINT'),
-        harvestEventsBatchSize: 2000,
+        harvestEventsBatchSize: 2000000,
         harvestConcurrency: 10,
-        multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
-        startBlock: 1377587,
+        multicallAddress: '0x5Eb3fa2DFECdDe21C950813C665E9364fa609bD2',
+        startBlock: 17087000,
         gasToken: {
-          name: 'BERA',
+          name: 'Berachain',
           symbol: 'BERA',
-          address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+          address: NATIVE_TOKEN,
+        },
+        contracts: {
+          CarbonController: {
+            address: '0x10Fa549E70Ede76C258c0808b289e4Ac3c9ab2e2',
+          },
+          CarbonVoucher: {
+            address: '0x248594Be9BE605905B8912cf575f03fE42d89054',  // Replace with actual contract address
+          },
+          BancorArbitrage: {
+            address: '0x0000000000000000000000000000000000000000',  // Replace with actual contract address
+          },
+          CarbonVortex: {
+            address: '0x248594Be9BE605905B8912cf575f03fE42d89054',  // Replace with actual contract address
+          },
         },
       },
     ];

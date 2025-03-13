@@ -13,6 +13,7 @@ export enum BlockchainType {
   Iota = 'iota-evm',
   Mantle = 'mantle',
   Berachain = 'berachain',
+  Sonic = 'sonic',
 }
 
 export enum ExchangeId {
@@ -23,6 +24,7 @@ export enum ExchangeId {
   OGIota = 'iota',
   OGMantle = 'mantle',
   OGBerachain = 'berachain',
+  OGSonic = 'sonic',
 }
 
 export interface GasToken {
@@ -79,8 +81,8 @@ export class DeploymentService {
         exchangeId: ExchangeId.OGIota,
         blockchainType: BlockchainType.Iota,
         rpcEndpoint: this.configService.get('IOTA_RPC_ENDPOINT'),
-        harvestEventsBatchSize: 2000,
-        harvestConcurrency: 10,
+        harvestEventsBatchSize: 500,
+        harvestConcurrency: 3,
         multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
         startBlock: 1936303,
         gasToken: {
@@ -130,8 +132,8 @@ export class DeploymentService {
         exchangeId: ExchangeId.OGMantle,
         blockchainType: BlockchainType.Mantle,
         rpcEndpoint: this.configService.get('MANTLE_RPC_ENDPOINT'),
-        harvestEventsBatchSize: 2000,
-        harvestConcurrency: 10,
+        harvestEventsBatchSize: 500,
+        harvestConcurrency: 3,
         multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
         startBlock: 18438182,
         gasToken: {
@@ -169,10 +171,36 @@ export class DeploymentService {
         },
       },
       {
+        exchangeId: ExchangeId.OGSonic,
+        blockchainType: BlockchainType.Sonic,
+        rpcEndpoint: this.configService.get('SONIC_RPC_ENDPOINT'),
+        harvestEventsBatchSize: 2000,
+        harvestConcurrency: 10,
+        multicallAddress: '0xcA11bde05977b3631167028862bE2a173976CA11',
+        startBlock: 1,
+        gasToken: {
+          name: 'SONIC',
+          symbol: 'SONIC',
+          address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+        },
+        nativeTokenAlias: '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38',
+        contracts: {
+          CarbonController: {
+            address: '0x10Fa549E70Ede76C258c0808b289e4Ac3c9ab2e2',
+          },
+          CarbonVoucher: {
+            address: '0x248594Be9BE605905B8912cf575f03fE42d89054',  // Replace with actual contract address
+          },
+          BancorArbitrage: {
+            address: '0x0000000000000000000000000000000000000000',  // Replace with actual contract address
+          },
+        },
+      },
+      {
         exchangeId: ExchangeId.OGBerachain,
         blockchainType: BlockchainType.Berachain,
         rpcEndpoint: this.configService.get('BERACHAIN_RPC_ENDPOINT'),
-        harvestEventsBatchSize: 2000000,
+        harvestEventsBatchSize: 2000,
         harvestConcurrency: 10,
         multicallAddress: '0x5Eb3fa2DFECdDe21C950813C665E9364fa609bD2',
         startBlock: 17087000,

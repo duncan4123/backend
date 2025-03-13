@@ -195,6 +195,7 @@ export class TokenService {
   private async getSymbols(addresses: string[], deployment: Deployment): Promise<string[]> {
     const symbols = await this.harvesterService.stringsWithMulticall(addresses, symbolABI, 'symbol', deployment);
     const index = addresses.indexOf(deployment.gasToken.address);
+    console.log('dunks check gas token', index);
     if (index >= 0) {
       symbols[index] = deployment.gasToken.symbol;
     }

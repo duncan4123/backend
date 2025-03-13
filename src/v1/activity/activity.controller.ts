@@ -104,10 +104,16 @@ export class ActivityController {
   @Header('Cache-Control', 'public, max-age=60')
   @ApiExchangeIdParam()
   async activity(@ExchangeIdParam() exchangeId: ExchangeId, @Query() params: ActivityDto): Promise<any> {
+    console.log(`Fetching activities for exchangeId: ${exchangeId}, params: ${JSON.stringify(params)}`);
     const deployment = await this.getDeployment(exchangeId);
+    console.log(`Using deployment: ${deployment.blockchainType}-${deployment.exchangeId}`);
+    
     const _params = { ...params, limit: params.limit || 100, deployment };
     const data = await this.activityV2Service.getFilteredActivities(_params, deployment);
-    return data.map((d) => this.mapData(d));
+    console.log(`Found ${data.length} activities`);
+    
+    const mappedData = data.map((d) => this.mapData(d));
+    return mappedData;
   }
 
   @Get('meta')

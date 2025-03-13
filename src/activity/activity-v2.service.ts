@@ -37,6 +37,8 @@ export class ActivityV2Service {
     const strategyStates: StrategyStatesMap = new Map<string, StrategyState>();
     const key = `${deployment.blockchainType}-${deployment.exchangeId}-activities-v2`;
     const lastProcessedBlock = await this.lastProcessedBlockService.getOrInit(key, deployment.startBlock);
+    
+    console.log(`[ActivityV2Service] Starting update from block ${lastProcessedBlock} to ${endBlock} for ${deployment.blockchainType}-${deployment.exchangeId}`);
 
     // Clean up existing activities for this batch range
     await this.activityRepository
@@ -46,12 +48,16 @@ export class ActivityV2Service {
       .andWhere('"blockchainType" = :blockchainType', { blockchainType: deployment.blockchainType })
       .andWhere('"exchangeId" = :exchangeId', { exchangeId: deployment.exchangeId })
       .execute();
+    
+    console.log(`[ActivityV2Service] Cleaned up existing activities for blocks >= ${lastProcessedBlock}`);
 
     await this.initializeStrategyStates(lastProcessedBlock, deployment, strategyStates);
+    console.log(`[ActivityV2Service] Initialized strategy states, count: ${strategyStates.size}`);
 
     // Process blocks in batches
     for (let batchStart = lastProcessedBlock; batchStart < endBlock; batchStart += this.BATCH_SIZE) {
       const batchEnd = Math.min(batchStart + this.BATCH_SIZE - 1, endBlock);
+      console.log(`[ActivityV2Service] Processing batch from ${batchStart} to ${batchEnd}`);
 
       // Fetch events in parallel
       const [createdEvents, updatedEvents, deletedEvents, transferEvents] = await Promise.all([
@@ -60,6 +66,12 @@ export class ActivityV2Service {
         this.strategyDeletedEventService.get(batchStart, batchEnd, deployment),
         this.voucherTransferEventService.get(batchStart, batchEnd, deployment),
       ]);
+
+      console.log(`[ActivityV2Service] Events fetched for batch:
+        - Created events: ${createdEvents.length}
+        - Updated events: ${updatedEvents.length}
+        - Deleted events: ${deletedEvents.length}
+        - Transfer events: ${transferEvents.length}`);
 
       // Process events into activities
       const activities = this.processEvents(
@@ -75,29 +87,45 @@ export class ActivityV2Service {
       // Save activities in smaller batches
       for (let i = 0; i < activities.length; i += this.SAVE_BATCH_SIZE) {
         const activityBatch = activities.slice(i, i + this.SAVE_BATCH_SIZE);
+        console.log(`[ActivityV2Service] Saving batch of ${activityBatch.length} activities to database`);
         await this.activityRepository.save(activityBatch);
       }
 
       // Update the last processed block for this batch
       await this.lastProcessedBlockService.update(key, batchEnd);
+      console.log(`[ActivityV2Service] Updated last processed block to ${batchEnd}`);
     }
   }
 
   async getFilteredActivities(params: ActivityDto | ActivityMetaDto, deployment: Deployment): Promise<ActivityV2[]> {
+    console.log(`[ActivityV2Service] Getting filtered activities for ${deployment.blockchainType}-${deployment.exchangeId}`);
+    console.log(`[ActivityV2Service] Query params:`, JSON.stringify(params, null, 2));
+    
     const queryBuilder = this.activityRepository.createQueryBuilder('activity');
+    
+    // Log the raw SQL query that will be executed
+    const rawQuery = queryBuilder
+      .where('activity.exchangeId = :exchangeId', { exchangeId: deployment.exchangeId })
+      .getSql();
+    console.log(`[ActivityV2Service] Initial SQL Query:`, rawQuery);
+    console.log(`[ActivityV2Service] Parameters:`, { exchangeId: deployment.exchangeId });
 
     queryBuilder.where('activity.exchangeId = :exchangeId', { exchangeId: deployment.exchangeId });
 
+    // Add logging for each condition
     if (params.start) {
+      console.log(`[ActivityV2Service] Adding start time filter:`, new Date(params.start * 1000));
       queryBuilder.andWhere('activity.timestamp >= :start', { start: new Date(params.start * 1000) });
     }
 
     if (params.end) {
+      console.log(`[ActivityV2Service] Adding end time filter:`, new Date(params.end * 1000));
       queryBuilder.andWhere('activity.timestamp <= :end', { end: new Date(params.end * 1000) });
     }
 
     if (params.actions) {
       const actionsArray = Array.isArray(params.actions) ? params.actions : [params.actions];
+      console.log(`[ActivityV2Service] Adding actions filter:`, actionsArray);
       queryBuilder.andWhere(
         new Brackets((qb) => {
           actionsArray.forEach((action, index) => {
@@ -156,29 +184,58 @@ export class ActivityV2Service {
     queryBuilder.orderBy('activity.timestamp', 'DESC');
 
     if ('limit' in params && params.limit) {
+      console.log(`[ActivityV2Service] Adding limit:`, params.limit);
       queryBuilder.take(params.limit);
     }
 
     if ('offset' in params && params.offset) {
+      console.log(`[ActivityV2Service] Adding offset:`, params.offset);
       queryBuilder.skip(params.offset);
     }
 
-    const activities = await queryBuilder.getMany();
+    // Log the final query before execution
+    const finalQuery = queryBuilder.getSql();
+    const finalParams = queryBuilder.getParameters();
+    console.log(`[ActivityV2Service] Final SQL Query:`, finalQuery);
+    console.log(`[ActivityV2Service] Final Parameters:`, finalParams);
 
-    // Replace any null values with 0
-    return activities.map((activity) => {
-      return {
-        ...activity,
-        sellBudget: activity.sellBudget ?? '0',
-        buyBudget: activity.buyBudget ?? '0',
-        sellPriceA: activity.sellPriceA ?? '0',
-        sellPriceMarg: activity.sellPriceMarg ?? '0',
-        sellPriceB: activity.sellPriceB ?? '0',
-        buyPriceA: activity.buyPriceA ?? '0',
-        buyPriceMarg: activity.buyPriceMarg ?? '0',
-        buyPriceB: activity.buyPriceB ?? '0',
-      };
-    });
+    console.log(`[ActivityV2Service] Executing query...`);
+    try {
+      const activities = await queryBuilder.getMany();
+      console.log(`[ActivityV2Service] Found ${activities.length} activities`);
+      
+      if (activities.length === 0) {
+        // If no activities found, let's check if the table has any data at all
+        const totalCount = await this.activityRepository
+          .createQueryBuilder('activity')
+          .getCount();
+        console.log(`[ActivityV2Service] Total records in activities table: ${totalCount}`);
+        
+        // Check if we have any records for this specific deployment
+        const deploymentCount = await this.activityRepository
+          .createQueryBuilder('activity')
+          .where('activity.exchangeId = :exchangeId', { exchangeId: deployment.exchangeId })
+          .getCount();
+        console.log(`[ActivityV2Service] Total records for deployment ${deployment.exchangeId}: ${deploymentCount}`);
+      }
+
+      return activities.map((activity) => {
+        return {
+          ...activity,
+          sellBudget: activity.sellBudget ?? '0',
+          buyBudget: activity.buyBudget ?? '0',
+          sellPriceA: activity.sellPriceA ?? '0',
+          sellPriceMarg: activity.sellPriceMarg ?? '0',
+          sellPriceB: activity.sellPriceB ?? '0',
+          buyPriceA: activity.buyPriceA ?? '0',
+          buyPriceMarg: activity.buyPriceMarg ?? '0',
+          buyPriceB: activity.buyPriceB ?? '0',
+        };
+      });
+    } catch (error) {
+      console.error(`[ActivityV2Service] Error executing query:`, error);
+      throw error;
+    }
   }
 
   async getActivityMeta(params: ActivityMetaDto, deployment: Deployment): Promise<any> {
@@ -296,15 +353,18 @@ export class ActivityV2Service {
     tokens: TokensByAddress,
     strategyStates: StrategyStatesMap,
   ): ActivityV2[] {
+    console.log(`[ActivityV2Service] Processing events for ${deployment.blockchainType}-${deployment.exchangeId}`);
     const activities: ActivityV2[] = [];
 
     // Process all events in chronological order
     const allEvents = this.sortEventsByChronologicalOrder(createdEvents, updatedEvents, deletedEvents, transferEvents);
+    console.log(`[ActivityV2Service] Total events to process: ${allEvents.length}`);
 
     for (const { type, event } of allEvents) {
       switch (type) {
         case 'created': {
           const createdEvent = event as StrategyCreatedEvent;
+          console.log(`[ActivityV2Service] Processing create event for strategy ${createdEvent.strategyId}`);
           const activity = createActivityFromEvent(createdEvent, 'create_strategy', deployment, tokens, strategyStates);
           activities.push(activity);
           strategyStates.set(createdEvent.strategyId, {
@@ -322,9 +382,11 @@ export class ActivityV2Service {
           const state = strategyStates.get(event.strategyId);
           if (state) {
             const updatedEvent = event as StrategyUpdatedEvent;
+            const updateType = this.determineUpdateType(updatedEvent, state);
+            console.log(`[ActivityV2Service] Processing update event for strategy ${event.strategyId}, type: ${updateType}`);
             const activity = createActivityFromEvent(
               updatedEvent,
-              this.determineUpdateType(updatedEvent, state),
+              updateType,
               deployment,
               tokens,
               strategyStates,
@@ -333,11 +395,14 @@ export class ActivityV2Service {
             state.order0 = updatedEvent.order0;
             state.order1 = updatedEvent.order1;
             state.lastProcessedBlock = event.block.id;
+          } else {
+            console.log(`[ActivityV2Service] Warning: No state found for updated strategy ${event.strategyId}`);
           }
           break;
         }
         case 'deleted': {
           const deletedEvent = event as StrategyDeletedEvent;
+          console.log(`[ActivityV2Service] Processing delete event for strategy ${deletedEvent.strategyId}`);
           const activity = createActivityFromEvent(deletedEvent, 'deleted', deployment, tokens, strategyStates);
           activities.push(activity);
           strategyStates.delete(deletedEvent.strategyId);
@@ -345,25 +410,29 @@ export class ActivityV2Service {
         }
         case 'transfer': {
           const transferEvent = event as VoucherTransferEvent;
-          // Filter out events with a zero address in either the 'from' or 'to' field
           if (
             transferEvent.to.toLowerCase() === '0x0000000000000000000000000000000000000000' ||
             transferEvent.from.toLowerCase() === '0x0000000000000000000000000000000000000000'
           ) {
+            console.log(`[ActivityV2Service] Skipping transfer event with zero address for strategy ${event.strategyId}`);
             break;
           }
           const state = strategyStates.get(event.strategyId);
           if (state) {
+            console.log(`[ActivityV2Service] Processing transfer event for strategy ${event.strategyId}`);
             const activity = this.createTransferActivity(transferEvent, state, deployment);
             activities.push(activity);
             state.currentOwner = transferEvent.to;
             state.lastProcessedBlock = event.block.id;
+          } else {
+            console.log(`[ActivityV2Service] Warning: No state found for transfer strategy ${event.strategyId}`);
           }
           break;
         }
       }
     }
 
+    console.log(`[ActivityV2Service] Processed ${activities.length} activities from ${allEvents.length} events`);
     return activities;
   }
 
@@ -578,40 +647,55 @@ export class ActivityV2Service {
     deployment: Deployment,
     strategyStates: StrategyStatesMap,
   ): Promise<void> {
+    console.log(`[ActivityV2Service] Initializing strategy states from block ${lastProcessedBlock}`);
     strategyStates.clear();
 
     // Get all creation events using the all() method
     const creationEvents = await this.strategyCreatedEventService.all(deployment);
+    console.log(`[ActivityV2Service] Found ${creationEvents.length} total creation events`);
+
     const creationEventsByStrategyId = new Map(creationEvents.map((event) => [event.strategyId, event]));
+    console.log(`[ActivityV2Service] Mapped ${creationEventsByStrategyId.size} unique strategies`);
 
-    // Get the last events for each strategy
-    const lastEvents = await this.activityRepository
-      .createQueryBuilder('activity')
-      .distinctOn(['activity.strategyId'])
-      .leftJoinAndSelect('activity.token0', 'token0')
-      .leftJoinAndSelect('activity.token1', 'token1')
-      .where('activity."blockNumber" <= :lastProcessedBlock', { lastProcessedBlock })
-      .andWhere('activity."blockchainType" = :blockchainType', { blockchainType: deployment.blockchainType })
-      .andWhere('activity."exchangeId" = :exchangeId', { exchangeId: deployment.exchangeId })
-      .andWhere('activity.action != :deletedAction', { deletedAction: 'deleted' })
-      .orderBy('activity."strategyId"')
-      .addOrderBy('activity."blockNumber"', 'DESC')
-      .addOrderBy('activity."transactionIndex"', 'DESC')
-      .addOrderBy('activity."logIndex"', 'DESC')
-      .getMany();
+    try {
+      // Get the last events for each strategy
+      const lastEvents = await this.activityRepository
+        .createQueryBuilder('activity')
+        .distinctOn(['activity.strategyId'])
+        .leftJoinAndSelect('activity.token0', 'token0')
+        .leftJoinAndSelect('activity.token1', 'token1')
+        .where('activity."blockNumber" <= :lastProcessedBlock', { lastProcessedBlock })
+        .andWhere('activity."blockchainType" = :blockchainType', { blockchainType: deployment.blockchainType })
+        .andWhere('activity."exchangeId" = :exchangeId', { exchangeId: deployment.exchangeId })
+        .andWhere('activity.action != :deletedAction', { deletedAction: 'deleted' })
+        .orderBy('activity."strategyId"')
+        .addOrderBy('activity."blockNumber"', 'DESC')
+        .addOrderBy('activity."transactionIndex"', 'DESC')
+        .addOrderBy('activity."logIndex"', 'DESC')
+        .getMany();
 
-    for (const activity of lastEvents) {
-      const creationEvent = creationEventsByStrategyId.get(activity.strategyId);
+      console.log(`[ActivityV2Service] Found ${lastEvents.length} last events for strategies`);
 
-      strategyStates.set(activity.strategyId, {
-        currentOwner: activity.currentOwner,
-        creationWallet: creationEvent.owner,
-        order0: activity.order0,
-        order1: activity.order1,
-        token0: activity.token0,
-        token1: activity.token1,
-        lastProcessedBlock: activity.blockNumber,
-      });
+      for (const activity of lastEvents) {
+        const creationEvent = creationEventsByStrategyId.get(activity.strategyId);
+        if (creationEvent) {
+          strategyStates.set(activity.strategyId, {
+            currentOwner: activity.currentOwner,
+            creationWallet: creationEvent.owner,
+            order0: activity.order0,
+            order1: activity.order1,
+            token0: activity.token0,
+            token1: activity.token1,
+            lastProcessedBlock: activity.blockNumber,
+          });
+        } else {
+          console.log(`[ActivityV2Service] Warning: No creation event found for strategy ${activity.strategyId}`);
+        }
+      }
+      console.log(`[ActivityV2Service] Successfully initialized ${strategyStates.size} strategy states`);
+    } catch (error) {
+      console.error(`[ActivityV2Service] Error initializing strategy states:`, error);
+      throw error;
     }
   }
 }

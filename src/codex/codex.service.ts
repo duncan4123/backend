@@ -11,6 +11,7 @@ export const NETWORK_IDS = {
   [BlockchainType.Mantle]: 5000,
   [BlockchainType.Blast]: 81457,
   [BlockchainType.Berachain]: 80094,
+  [BlockchainType.Sonic]: 146,
 };
 
 @Injectable()
@@ -161,6 +162,11 @@ export class CodexService {
   async getTopTokenAddresses(deployment: Deployment): Promise<string[]> {
     const networkId = NETWORK_IDS[deployment.blockchainType];
     const tokens = await this.fetchTopTokens(networkId);
+    console.log('First 5 tokens:', tokens.slice(0, 5).map(t => ({
+      address: t.token.address,
+      symbol: t.token.symbol,
+      name: t.token.name
+    })));
     const uniqueAddresses = Array.from(new Set(tokens.map((t) => t.token.address.toLowerCase())));
     return uniqueAddresses;
     console.log(uniqueAddresses);
@@ -191,6 +197,7 @@ export class CodexService {
         });
 
         fetched = result.filterTokens.results;
+        console.log('Fetched dunks this is possibly becuase no sdk data tokens:', fetched)
         allTokens = [...allTokens, ...fetched];
         offset += limit;
       } catch (error) {

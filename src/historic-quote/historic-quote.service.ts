@@ -41,12 +41,13 @@ export class HistoricQuoteService implements OnModuleInit {
       { name: 'coinmarketcap', enabled: true },
       { name: 'codex', enabled: true },
     ],
-    [BlockchainType.Sei]: [{ name: 'codex', enabled: true }],
-    [BlockchainType.Celo]: [{ name: 'codex', enabled: true }],
-    [BlockchainType.Blast]: [{ name: 'codex', enabled: true }],
+    // [BlockchainType.Sei]: [{ name: 'codex', enabled: true }],
+    // [BlockchainType.Celo]: [{ name: 'codex', enabled: true }],
+    // [BlockchainType.Blast]: [{ name: 'codex', enabled: true }],
     [BlockchainType.Iota]: [{ name: 'coingecko', enabled: true }],
     [BlockchainType.Mantle]: [{ name: 'coingecko', enabled: true }],
     [BlockchainType.Berachain]: [{ name: 'codex', enabled: true }],
+    [BlockchainType.Sonic]: [{ name: 'codex', enabled: true }],
   };
 
   constructor(
@@ -69,15 +70,15 @@ export class HistoricQuoteService implements OnModuleInit {
     }
     
     // Uncomment to run seeding on startup
-    // this.seedOnStartup();
+    this.seedOnStartup();
   }
 
   private async seedOnStartup() {
     const shouldSeedOnStartup = this.configService.get('SEED_CODEX_ON_STARTUP') === '1';
     if (shouldSeedOnStartup) {
-      console.log('Starting to seed Codex data...');
+      console.log('Starting dunks to seed Codex data...');
       // Seed for specific blockchain types
-      await this.seedCodex(BlockchainType.Mantle); // ToDo add sonic
+      await this.seedCodex(BlockchainType.Berachain); // ToDo add sonic
       // Add more blockchain types as needed
       console.log('Codex data seeding completed');
     }

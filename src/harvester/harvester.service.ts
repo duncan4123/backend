@@ -134,9 +134,12 @@ export class HarvesterService {
     fromBlock: number,
     toBlock: number,
     address?: string,
-    deployment?: Deployment, // Accept deployment directly
+    deployment?: Deployment,
   ): Promise<any[]> {
+    console.log(`[Harvester] Fetching ${eventName} events for ${contractName} from blocks ${fromBlock}-${toBlock}`);
+    
     if (fromBlock > toBlock) {
+      console.log(`[Harvester] Invalid block range: ${fromBlock} > ${toBlock}`);
       return [];
     }
 
@@ -182,6 +185,7 @@ export class HarvesterService {
     }
 
     await Promise.all(tasks);
+    console.log(`[Harvester] Total events fetched: ${events.length}`);
     return events;
   }
 
@@ -202,6 +206,10 @@ export class HarvesterService {
     const { deployment } = args;
     const key = `${deployment.blockchainType}-${deployment.exchangeId}-${args.entity}`;
     const lastProcessedBlock = await this.lastProcessedBlockService.getOrInit(key, deployment.startBlock);
+    
+    console.log(`[Harvester]dunks Starting processEvents for ${key}`);
+    console.log(`[Harvester]dunks  Processing from block ${lastProcessedBlock + 1} to ${args.endBlock}`);
+
     const result = [];
 
     if (args.skipPreClearing !== true) {
@@ -230,7 +238,9 @@ export class HarvesterService {
         deployment,
       );
 
+      console.log(`[Harvester] Fetched ${events.length} events from blocks ${rangeStart}-${rangeEnd}`);
       if (events.length > 0) {
+        console.log(`[Harvester] Sample event:`, JSON.stringify(events[0], null, 2));
         let blocksDictionary: BlocksDictionary;
 
         if (args.tagTimestampFromBlock) {
@@ -335,7 +345,10 @@ export class HarvesterService {
         );
 
         const batches = _.chunk(newEvents, 1000);
-        await Promise.all(batches.map((batch) => args.repository.save(batch)));
+        for (const batch of batches) {
+          console.log(`[Harvester] Saving batch of ${batch.length} events to database`);
+          await args.repository.save(batch);
+        }
 
         result.push(newEvents);
       }

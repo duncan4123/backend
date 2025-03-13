@@ -22,6 +22,7 @@ export class MarketRateController {
     [BlockchainType.Iota]: [{ name: 'coingecko', enabled: true }],
     [BlockchainType.Mantle]: [{ name: 'coingecko', enabled: true }],
     [BlockchainType.Berachain]: [{ name: 'codex', enabled: true }],
+    [BlockchainType.Sonic]: [{ name: 'codex', enabled: true }],
   };
 
   constructor(

@@ -62,6 +62,7 @@ export class CoinGeckoService {
       'iota-evm': '0x6e47f8d48a01b44df3fff35d258a10a3aedc114c',
       mantle: '0x78c1b0C915c4FAA5FffA6CAbf0219DA63d7f4cb8',
       berachain: '0x6969696969696969696969696969696969696969',
+      sonic: '0x039e2fB66102314Ce7b64Ce5Ce3E5183bc94aD38',
     };
     const wrappedGasAddress = wrappedGasMapping[deployment.blockchainType];
 

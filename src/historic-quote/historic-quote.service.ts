@@ -37,10 +37,10 @@ export class HistoricQuoteService implements OnModuleInit {
   private readonly intervalDuration: number;
   private shouldPollQuotes: boolean;
   private priceProviders: BlockchainProviderConfig = {
-    [BlockchainType.Ethereum]: [
-      { name: 'coinmarketcap', enabled: true },
-      { name: 'codex', enabled: true },
-    ],
+    // [BlockchainType.Ethereum]: [
+    //   { name: 'coinmarketcap', enabled: true },
+    //   { name: 'codex', enabled: true },
+    // ],
     // [BlockchainType.Sei]: [{ name: 'codex', enabled: true }],
     // [BlockchainType.Celo]: [{ name: 'codex', enabled: true }],
     // [BlockchainType.Blast]: [{ name: 'codex', enabled: true }],
@@ -90,10 +90,13 @@ export class HistoricQuoteService implements OnModuleInit {
 
     try {
       await Promise.all([
-        await this.updateCoinMarketCapQuotes(),
-        await this.updateCodexQuotes(BlockchainType.Sei),
-        await this.updateCodexQuotes(BlockchainType.Celo),
+        // await this.updateCoinMarketCapQuotes(),
+        // await this.updateCodexQuotes(BlockchainType.Sei),
+        // await this.updateCodexQuotes(BlockchainType.Celo),
         await this.updateCodexQuotes(BlockchainType.Berachain),
+        await this.updateCodexQuotes(BlockchainType.Sonic),
+        await this.updateCodexQuotes(BlockchainType.Mantle),
+        await this.updateCodexQuotes(BlockchainType.Iota),
       ]);
     } catch (error) {
       console.error('Error updating historic quotes:', error);
@@ -104,25 +107,25 @@ export class HistoricQuoteService implements OnModuleInit {
     console.log('Historic quotes updated');
   }
 
-  private async updateCoinMarketCapQuotes(): Promise<void> {
-    const latest = await this.getLatest(BlockchainType.Ethereum); // Pass the deployment to filter by blockchainType
-    const quotes = await this.coinmarketcapService.getLatestQuotes();
-    const newQuotes = [];
+  // private async updateCoinMarketCapQuotes(): Promise<void> {
+  //   const latest = await this.getLatest(BlockchainType.Ethereum); // Pass the deployment to filter by blockchainType
+  //   const quotes = await this.coinmarketcapService.getLatestQuotes();
+  //   const newQuotes = [];
 
-    for (const q of quotes) {
-      const tokenAddress = q.tokenAddress;
-      const price = `${q.usd}`;
+  //   for (const q of quotes) {
+  //     const tokenAddress = q.tokenAddress;
+  //     const price = `${q.usd}`;
 
-      if (latest[tokenAddress] && latest[tokenAddress].usd === price) continue;
+  //     if (latest[tokenAddress] && latest[tokenAddress].usd === price) continue;
 
-      q.blockchainType = BlockchainType.Ethereum;
-      newQuotes.push(this.repository.create(q));
-    }
+  //     q.blockchainType = BlockchainType.Ethereum;
+  //     newQuotes.push(this.repository.create(q));
+  //   }
 
-    const batches = _.chunk(newQuotes, 1000);
-    await Promise.all(batches.map((batch) => this.repository.save(batch)));
-    console.log('CoinMarketCap quotes updated');
-  }
+  //   const batches = _.chunk(newQuotes, 1000);
+  //   await Promise.all(batches.map((batch) => this.repository.save(batch)));
+  //   console.log('CoinMarketCap quotes updated');
+  // }
 
   private async updateCodexQuotes(blockchainType: BlockchainType): Promise<void> {
     const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);
@@ -166,41 +169,41 @@ export class HistoricQuoteService implements OnModuleInit {
     console.log('Codex quotes updated');
   }
 
-  async seed(): Promise<void> {
-    const start = moment().subtract(1, 'year').unix();
-    const end = moment().unix();
-    let i = 0;
+  // async seed(): Promise<void> {
+  //   const start = moment().subtract(1, 'year').unix();
+  //   const end = moment().unix();
+  //   let i = 0;
 
-    const tokens = await this.coinmarketcapService.getAllTokens();
-    const batchSize = 100; // Adjust the batch size as needed
+  //   const tokens = await this.coinmarketcapService.getAllTokens();
+  //   const batchSize = 100; // Adjust the batch size as needed
 
-    for (let startIndex = 0; startIndex < tokens.length; startIndex += batchSize) {
-      const batchTokens = tokens.slice(startIndex, startIndex + batchSize);
-      const addresses = batchTokens.map((token) => token.platform.token_address);
+  //   for (let startIndex = 0; startIndex < tokens.length; startIndex += batchSize) {
+  //     const batchTokens = tokens.slice(startIndex, startIndex + batchSize);
+  //     const addresses = batchTokens.map((token) => token.platform.token_address);
 
-      // Fetch historical quotes for the current batch of tokens
-      const quotesByAddress = await this.coinmarketcapService.getHistoricalQuotes(addresses, start, end);
+  //     // Fetch historical quotes for the current batch of tokens
+  //     const quotesByAddress = await this.coinmarketcapService.getHistoricalQuotes(addresses, start, end);
 
-      for (const token of batchTokens) {
-        const address = token.platform.token_address;
-        const quotes = quotesByAddress[address];
+  //     for (const token of batchTokens) {
+  //       const address = token.platform.token_address;
+  //       const quotes = quotesByAddress[address];
 
-        const newQuotes = quotes.map((q: any) =>
-          this.repository.create({
-            tokenAddress: q.address,
-            usd: q.price,
-            timestamp: moment.unix(q.timestamp).utc().toISOString(),
-            provider: 'coinmarketcap',
-            blockchainType: BlockchainType.Ethereum,
-          }),
-        );
+  //       const newQuotes = quotes.map((q: any) =>
+  //         this.repository.create({
+  //           tokenAddress: q.address,
+  //           usd: q.price,
+  //           timestamp: moment.unix(q.timestamp).utc().toISOString(),
+  //           provider: 'coinmarketcap',
+  //           blockchainType: BlockchainType.Berachain,
+  //         }),
+  //       );
 
-        const batches = _.chunk(newQuotes, 1000);
-        await Promise.all(batches.map((batch) => this.repository.save(batch)));
-        console.log(`History quote seeding, finished ${++i} of ${tokens.length}%`, new Date());
-      }
-    }
-  }
+  //       const batches = _.chunk(newQuotes, 1000);
+  //       await Promise.all(batches.map((batch) => this.repository.save(batch)));
+  //       console.log(`History quote seeding, finished ${++i} of ${tokens.length}%`, new Date());
+  //     }
+  //   }
+  // }
 
   async seedCodex(blockchainType: BlockchainType): Promise<void> {
     const deployment = this.deploymentService.getDeploymentByBlockchainType(blockchainType);

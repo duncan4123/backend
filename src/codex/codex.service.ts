@@ -5,13 +5,14 @@ import moment from 'moment';
 import { BlockchainType, Deployment, NATIVE_TOKEN } from '../deployment/deployment.service';
 
 export const NETWORK_IDS = {
-  [BlockchainType.Sei]: 531,
-  [BlockchainType.Celo]: 42220,
-  [BlockchainType.Ethereum]: 1,
+  // [BlockchainType.Sei]: 531,
+  // [BlockchainType.Celo]: 42220,
+  // [BlockchainType.Ethereum]: 1,
   [BlockchainType.Mantle]: 5000,
-  [BlockchainType.Blast]: 81457,
+  // [BlockchainType.Blast]: 81457,
   [BlockchainType.Berachain]: 80094,
   [BlockchainType.Sonic]: 146,
+  [BlockchainType.Iota]: 531,
 };
 
 @Injectable()
